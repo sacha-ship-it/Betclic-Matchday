@@ -22,16 +22,10 @@ const BASE = { 1: 2, 2: 4, 3: 8 };
 const EMOJIS = { 1: '🤙', 2: '⚡', 3: '🔥' };
 const NAMES = { 1: 'Chill', 2: 'Joueur', 3: 'Vraiiiment joueur' };
 
-// Aucun programme client, match ou montant prérempli.
 const EDITION = {
   title: 'BETCLIC MATCHDAY',
   description: 'Retrouve ici les prochains MatchDays.',
-  blocks: {
-    mardi: '',
-    mercredi: '',
-    jeudi: '',
-    weekend: '',
-  },
+  blocks: { mardi: '', mercredi: '', jeudi: '', weekend: '' },
 };
 
 const GROUPS = {
@@ -139,9 +133,7 @@ function monday(s) {
 }
 
 function sportDay(ms = Date.now()) {
-  return Number(parts(ms).hour) < 12
-    ? shift(day(ms), -1)
-    : day(ms);
+  return Number(parts(ms).hour) < 12 ? shift(day(ms), -1) : day(ms);
 }
 
 function time(ms) {
@@ -731,14 +723,10 @@ function weekMatches(s, p) {
 
 function weekCard(s, p) {
   const groups = programBlocks(p);
-
-  // La présence du texte suffit. Aucun ancien indicateur ne peut l’ignorer.
   const custom = Boolean(String(p.description || '').trim());
   const intro = custom ? p.description : EDITION.description;
-
   const e = embed(p.title);
 
-  // Si texte est rempli, aucun bloc automatique n’est affiché.
   for (const [key, label] of (custom ? [] : groups)) {
     const date = key === 'weekend' ? '' : (() => {
       const target = {
@@ -833,10 +821,7 @@ function staffCard(x, kind) {
     );
   } else {
     fields.push(
-      {
-        name: 'Semaine',
-        value: `${x.start} au ${x.end}`,
-      },
+      { name: 'Semaine', value: `${x.start} au ${x.end}` },
       {
         name: 'Salon des matchs',
         value: `<#${x.matchesChannelId || x.channelId}>`,
@@ -860,10 +845,7 @@ function rankCard(s, r, page = 0) {
   const all = rank(s, r);
   const pages = Math.max(1, Math.ceil(all.length / 20));
 
-  page = Math.max(
-    0,
-    Math.min(Number(page) || 0, pages - 1)
-  );
+  page = Math.max(0, Math.min(Number(page) || 0, pages - 1));
 
   const pending = Object.values(s.matches).filter(m =>
     m.status !== 'deleted' &&
@@ -1744,9 +1726,7 @@ async function run() {
         }
 
         if (o.getString(`choix${n}_cote`) !== null) {
-          m[`choice${n}Odds`] = odds(
-            o.getString(`choix${n}_cote`)
-          );
+          m[`choice${n}Odds`] = odds(o.getString(`choix${n}_cote`));
         }
       }
 
@@ -2108,9 +2088,7 @@ async function run() {
     }
 
     if (name === 'delete-match' || name === 'delete-week') {
-      const table = name === 'delete-match'
-        ? 'matches'
-        : 'programs';
+      const table = name === 'delete-match' ? 'matches' : 'programs';
 
       const id = i.options.getString(
         table === 'matches' ? 'match_id' : 'programme_id'
@@ -2140,9 +2118,7 @@ async function run() {
     }
 
     if (name === 'classement') {
-      return i.editReply(
-        rankCard(s, rangeOptions(i.options))
-      );
+      return i.editReply(rankCard(s, rangeOptions(i.options)));
     }
 
     if (name === 'list-matches') {
@@ -2432,12 +2408,20 @@ async function run() {
 
     const m = getMatch(s, mid);
 
+    // Seul le bouton Mon choix affiche le pronostic déjà validé.
     if (action === 'my') {
       return i.editReply(myCard(s, m, i.user.id));
     }
 
+    // Nouveau clic sur un choix après validation.
     if (s.bets[mid]?.[i.user.id]) {
-      return i.editReply(myCard(s, m, i.user.id));
+      return i.editReply({
+        content:
+          '✅ Ton pronostic est déjà enregistré. Pour le consulter, appuie sur « 📋 Mon choix ».',
+        embeds: [],
+        components: [],
+        allowedMentions: quiet,
+      });
     }
 
     need(isOpen(m), 'Les mises sont fermées.');
