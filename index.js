@@ -22,8 +22,8 @@ const BASE = { 1: 2, 2: 4, 3: 8 };
 const EMOJIS = { 1: '🤙', 2: '⚡', 3: '🔥' };
 const NAMES = { 1: 'Chill', 2: 'Joueur', 3: 'Vraiiiment joueur' };
 
-// Programme prérempli pour cette édition.
-// Les affiches restent indépendantes des paris créés avec /create-match.
+// Valeurs de base pour cette édition.
+// Le titre, le texte, les dates, les affiches et l’image sont modifiables.
 const EDITION = {
   title: 'BETCLIC MATCHDAY DE LA MUERTE ⚽️ 💀',
   start: '2026-10-20',
@@ -72,7 +72,12 @@ const digest = x =>
 
 const clean = (x, max, label) => {
   const s = String(x || '').trim().replace(/[\u2013\u2014]/g, '-');
-  need(s.length > 0 && s.length <= max, `${label} : entre 1 et ${max} caractères.`);
+
+  need(
+    s.length > 0 && s.length <= max,
+    `${label} : entre 1 et ${max} caractères.`
+  );
+
   return s;
 };
 
@@ -315,7 +320,6 @@ function migrate(s) {
     }
   }
 
-  // Les anciennes annonces sont figées une fois.
   for (const p of Object.values(s.programs)) {
     if (!p.blocks) {
       p.blocks = Object.fromEntries(
@@ -599,9 +603,8 @@ function media(x, e) {
   return {};
 }
 
-// Si nécessaire, une partie du texte est placée au-dessus de l’embed.
 function longText(e, intro, suffix) {
-  e.setDescription(suffix);
+  e.setDescription(suffix || null);
 
   const budget = Math.min(
     4096 - suffix.length,
@@ -642,8 +645,9 @@ function matchCard(m) {
   const open = isOpen(m);
   const e = embed(m.title).setColor(open ? COLOR : 0x7F1D1D);
 
+  // Le Markdown du texte saisi est conservé.
   const intro = m.description
-    ? safe(m.description)
+    ? m.description
     : 'Choisis ton pronostic et tente de grimper au classement de la semaine !';
 
   const lines = [
@@ -749,14 +753,17 @@ function weekMatches(s, p) {
 function weekCard(s, p) {
   const groups = programBlocks(p);
 
-  const intro = safe(p.description || EDITION.description)
-    .replace(/complètement LOCO/gi, '**$&**')
-    .replace(
-      /1[ \u00a0\u202f]*000\s*€\s*de\s*Freebets/gi,
-      '**1 000 € de Freebets**'
-    );
+  const custom = p.customText ??
+    Boolean(p.description && p.description !== EDITION.description);
 
-  const lines = [
+  const intro = custom
+    ? p.description
+    : EDITION.description
+        .replace('complètement LOCO', '**complètement LOCO**')
+        .replace('1 000 € de Freebets', '**1 000 € de Freebets**');
+
+  // Avec un texte personnalisé, aucune description automatique n’est ajoutée.
+  const suffix = custom ? '' : [
     '',
     '',
     `🗓️ **Du ${dateLabel(p.start)} au ${dateLabel(p.end)}**`,
@@ -769,7 +776,7 @@ function weekCard(s, p) {
     'Chaque MatchDay propose 3 choix : **2, 4 ou 8 points**, avec **un boost x2 par journée**.',
     '',
     '\u200b',
-  ];
+  ].join('\n');
 
   const e = embed(p.title);
 
@@ -815,10 +822,12 @@ function weekCard(s, p) {
     });
   }
 
-  e.addFields({
-    name: '🕒 Horaires',
-    value: 'Heure de Paris. Sous réserve de modification du calendrier.',
-  });
+  if (!custom) {
+    e.addFields({
+      name: '🕒 Horaires',
+      value: 'Heure de Paris. Sous réserve de modification du calendrier.',
+    });
+  }
 
   if (p.rulesChannelId) {
     e.addFields({
@@ -827,11 +836,15 @@ function weekCard(s, p) {
     });
   }
 
+  const disclaimer = !custom || /freebets?/i.test(intro)
+    ? ' | Freebets = crédits de jeu non retirables'
+    : '';
+
   e.setFooter({
-    text: `Betclic MatchDay | Programme ${p.id} | Freebets = crédits de jeu non retirables`,
+    text: `Betclic MatchDay | Programme ${p.id}${disclaimer}`,
   });
 
-  const content = longText(e, intro, lines.join('\n'));
+  const content = longText(e, intro, suffix);
 
   return {
     content,
@@ -1023,10 +1036,15 @@ function matchOptions(c, editing = false) {
     c.addBooleanOption(o => o
       .setName('retirer_image')
       .setDescription('Supprimer le visuel')
-    ).addBooleanOption(o => o
-      .setName('retirer_notification')
-      .setDescription('Retirer la notification')
-    );
+    )
+      .addBooleanOption(o => o
+        .setName('retirer_notification')
+        .setDescription('Retirer la notification')
+      )
+      .addBooleanOption(o => o
+        .setName('retirer_texte')
+        .setDescription('Revenir au texte de base')
+      );
   }
 
   return c;
@@ -1111,10 +1129,15 @@ function programOptions(c, editing = false) {
     c.addBooleanOption(o => o
       .setName('retirer_image')
       .setDescription('Supprimer le visuel')
-    ).addBooleanOption(o => o
-      .setName('retirer_notification')
-      .setDescription('Retirer la notification')
-    );
+    )
+      .addBooleanOption(o => o
+        .setName('retirer_notification')
+        .setDescription('Retirer la notification')
+      )
+      .addBooleanOption(o => o
+        .setName('retirer_texte')
+        .setDescription('Revenir au texte de base')
+      );
   }
 
   return c;
@@ -1795,8 +1818,7 @@ async function run() {
         : old?.date || sportDay(closeAt(m));
 
       if (o.getString('texte') !== null) {
-        m.description = o.getString('texte')
-          .replace(/[\u2013\u2014]/g, '-');
+        m.description = o.getString('texte');
       }
 
       if (o.getString('image') !== null) {
@@ -1814,6 +1836,10 @@ async function run() {
 
       if (editing && o.getBoolean('retirer_notification')) {
         m.roleId = null;
+      }
+
+      if (editing && o.getBoolean('retirer_texte')) {
+        m.description = '';
       }
 
       need(
@@ -1921,7 +1947,8 @@ async function run() {
         publishAt: Date.now(),
         imageUrl: '',
         imageFile: '',
-        description: EDITION.description,
+        description: '',
+        customText: false,
         title: EDITION.title,
         start: EDITION.start,
         end: EDITION.end,
@@ -1991,8 +2018,8 @@ async function run() {
       p.matchesChannelId ||= p.channelId;
 
       if (o.getString('texte') !== null) {
-        p.description = o.getString('texte')
-          .replace(/[\u2013\u2014]/g, '-');
+        p.description = o.getString('texte');
+        p.customText = Boolean(p.description.trim());
       }
 
       if (o.getString('image') !== null) {
@@ -2010,6 +2037,11 @@ async function run() {
 
       if (editing && o.getBoolean('retirer_notification')) {
         p.roleId = null;
+      }
+
+      if (editing && o.getBoolean('retirer_texte')) {
+        p.description = '';
+        p.customText = false;
       }
 
       const preview = weekCard(s, p);
@@ -2302,7 +2334,6 @@ async function run() {
       finalRevision,
     ] = i.customId.split(':');
 
-    // Compatibilité avec les anciens boutons.
     if (i.customId.startsWith('bet_')) {
       const a = i.customId.split('_');
       action = 'bet';
@@ -2596,7 +2627,6 @@ async function run() {
 
       if (staffId) await channel(staffId);
 
-      // Les commandes de ce bot sont mises à jour au démarrage.
       for (const c of commands) {
         await guild.commands.create(c.toJSON());
       }
