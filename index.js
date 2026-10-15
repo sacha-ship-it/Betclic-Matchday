@@ -24,25 +24,50 @@ const TZ = process.env.TIMEZONE || 'Europe/Paris';
 const UNIT = process.env.POINTS_LABEL || 'crânes';
 const ICON = process.env.POINTS_EMOJI || '💀';
 
-const COLOR = /^#[a-f\d]{6}$/i.test(
-  process.env.MATCHDAY_COLOR || ''
-)
+const COLOR = /^#[a-f\d]{6}$/i.test(process.env.MATCHDAY_COLOR || '')
   ? process.env.MATCHDAY_COLOR
   : '#E10014';
 
 const BASE = { 1: 2, 2: 4, 3: 8 };
 const EMOJIS = { 1: '🤙', 2: '⚡', 3: '🔥' };
+const NAMES = { 1: 'Chill', 2: 'Joueur', 3: 'Vraiiiment joueur' };
 
-const NAMES = {
-  1: 'Chill',
-  2: 'Joueur',
-  3: 'Vraiiiment joueur',
+// Programme indépendant des paris, prérempli pour cette édition.
+// Horaires vérifiés le 15 octobre 2026, en heure de Paris.
+// Les autres semaines doivent être renseignées avec leurs propres affiches.
+const EDITION = {
+  title: 'BETCLIC MATCHDAY DE LA MUERTE ⚽️ 💀',
+  start: '2026-10-20',
+  end: '2026-10-25',
+
+  description:
+    'Une semaine complètement LOCO de paris et 1 000 € de Freebets* à se partager vous attendent ! 🎉',
+
+  blocks: {
+    mardi:
+      '21h00 | PSG - Barcelone / 21h00 | Liverpool - Villarreal / 21h00 | Stuttgart - Atlético',
+
+    mercredi:
+      '18h45 | Lille - Galatasaray / 21h00 | Bayern - Arsenal / 21h00 | Bruges - Lens',
+
+    jeudi:
+      '18h45 | Juventus - Rennes / 18h45 | Sturm Graz - OM / 21h00 | Hoffenheim - OL',
+
+    weekend:
+      'Sam. 24 à 13h30 | Aston Villa - Manchester City / Sam. 24 à 18h00 | Naples - Roma / Dim. 25 à 15h00 | Monaco - LOSC / Dim. 25 à 20h45 | PSG - OL / Dim. 25 à 21h00 | Barça - Real',
+  },
+};
+
+const GROUPS = {
+  mardi: '⚽ MARDI',
+  mercredi: '⚽ MERCREDI',
+  jeudi: '⚽ JEUDI',
+  weekend: '🔥 LE WEEK-END',
 };
 
 const quiet = { parse: [] };
-
-const uid = () =>
-  randomUUID().replaceAll('-', '').slice(0, 16);
+const uid = () => randomUUID().replaceAll('-', '').slice(0, 16);
+const copy = x => structuredClone(x);
 
 class UserError extends Error {}
 
@@ -54,16 +79,10 @@ const safe = x =>
   escapeMarkdown(String(x)).replaceAll('@', '@\u200b');
 
 const digest = x =>
-  createHash('sha256')
-    .update(JSON.stringify(x))
-    .digest('hex');
-
-const copy = x => structuredClone(x);
+  createHash('sha256').update(JSON.stringify(x)).digest('hex');
 
 const clean = (x, max, label) => {
-  const s = String(x || '')
-    .trim()
-    .replace(/[\u2013\u2014]/g, '-');
+  const s = String(x || '').trim().replace(/[\u2013\u2014]/g, '-');
 
   need(
     s.length > 0 && s.length <= max,
@@ -72,6 +91,45 @@ const clean = (x, max, label) => {
 
   return s;
 };
+
+function fixtures(text) {
+  return String(text || '')
+    .split(/\s+\/\s+|\r?\n|\\n/)
+    .map(x => x.trim())
+    .filter(Boolean);
+}
+
+function programBlocks(p) {
+  return Object.entries(GROUPS).filter(
+    ([key]) => fixtures(p.blocks?.[key]).length
+  );
+}
+
+function validateProgram(p) {
+  dateKey(p.start);
+  dateKey(p.end);
+
+  need(
+    p.start <= p.end,
+    'La date de début doit précéder la date de fin.'
+  );
+
+  need(
+    programBlocks(p).length,
+    'Ajoute au moins un groupe de matchs.'
+  );
+
+  for (const [key] of programBlocks(p)) {
+    const text = fixtures(p.blocks[key])
+      .map(x => '• ' + safe(x))
+      .join('\n');
+
+    need(
+      text.length <= 1000,
+      `Le groupe ${key} est trop long : raccourcis les noms ou les horaires.`
+    );
+  }
+}
 
 function parts(ms) {
   return Object.fromEntries(
@@ -114,8 +172,7 @@ function dateKey(s) {
 
 function shift(s, n) {
   return new Date(
-    Date.parse(dateKey(s) + 'T12:00:00Z') +
-      n * 86400000
+    Date.parse(dateKey(s) + 'T12:00:00Z') + n * 86400000
   )
     .toISOString()
     .slice(0, 10);
@@ -129,7 +186,6 @@ function monday(s) {
   return shift(s, -(w === 0 ? 6 : w - 1));
 }
 
-// Conservation de la journée sportive de midi à midi.
 function sportDay(ms = Date.now()) {
   return Number(parts(ms).hour) < 12
     ? shift(day(ms), -1)
@@ -159,7 +215,7 @@ function parseTime(s) {
 
   need(
     /^\d{4}-\d{2}-\d{2} (?:[01]\d|2[0-3]):[0-5]\d$/.test(text),
-    'Heure attendue : AAAA-MM-JJ HH:mm, exemple 2026-10-26 09:00.'
+    'Heure attendue : AAAA-MM-JJ HH:mm, exemple 2026-10-20 09:00.'
   );
 
   dateKey(text.slice(0, 10));
@@ -175,8 +231,7 @@ function parseTime(s) {
     const p = parts(t);
 
     if (
-      `${p.year}-${p.month}-${p.day} ${p.hour}:${p.minute}` ===
-      text
+      `${p.year}-${p.month}-${p.day} ${p.hour}:${p.minute}` === text
     ) {
       matches.push(t);
     }
@@ -314,6 +369,45 @@ function migrate(s) {
     }
   }
 
+  // Les anciennes annonces deviennent indépendantes des paris.
+  for (const p of Object.values(s.programs)) {
+    if (!p.blocks) {
+      p.blocks = Object.fromEntries(
+        Object.keys(GROUPS).map(key => [key, ''])
+      );
+
+      const selected = Object.values(s.matches)
+        .filter(
+          m =>
+            m.status !== 'deleted' &&
+            m.channelId ===
+              (p.matchesChannelId || p.channelId) &&
+            m.date >= p.start &&
+            m.date <= p.end
+        )
+        .sort((a, b) => closeAt(a) - closeAt(b));
+
+      for (const m of selected) {
+        const weekday = new Date(
+          m.date + 'T12:00:00Z'
+        ).getUTCDay();
+
+        const key =
+          {
+            2: 'mardi',
+            3: 'mercredi',
+            4: 'jeudi',
+          }[weekday] || 'weekend';
+
+        p.blocks[key] +=
+          (p.blocks[key] ? ' / ' : '') + m.title;
+      }
+    }
+
+    p.version ||= 1;
+    p.dirty = true;
+  }
+
   return s;
 }
 
@@ -334,7 +428,6 @@ class Store {
         )
       );
     } catch (e) {
-      // Une base illisible n'est jamais remplacée.
       if (e.code !== 'ENOENT') throw e;
       this.state = initial();
     }
@@ -474,10 +567,7 @@ function place(
 ) {
   const m = getMatch(s, mid);
 
-  need(
-    isOpen(m, now),
-    'Les mises sont fermées.'
-  );
+  need(isOpen(m, now), 'Les mises sont fermées.');
 
   need(
     m.revision === revision && BASE[choice],
@@ -552,14 +642,9 @@ function rangeOptions(o) {
   const end = o.getString('fin');
 
   if (start || end) {
-    need(
-      start && end,
-      'Renseigne debut ET fin.'
-    );
-
+    need(start && end, 'Renseigne debut ET fin.');
     dateKey(start);
     dateKey(end);
-
     need(start <= end, 'Période invalide.');
 
     return {
@@ -606,11 +691,12 @@ const button = (
   label,
   style = ButtonStyle.Secondary,
   disabled = false
-) => new ButtonBuilder()
-  .setCustomId(id)
-  .setLabel(label.slice(0, 80))
-  .setStyle(style)
-  .setDisabled(disabled);
+) =>
+  new ButtonBuilder()
+    .setCustomId(id)
+    .setLabel(label.slice(0, 80))
+    .setStyle(style)
+    .setDisabled(disabled);
 
 const row = (...buttons) =>
   new ActionRowBuilder().addComponents(buttons);
@@ -623,10 +709,9 @@ function media(x, e) {
 
     return {
       files: [
-        new AttachmentBuilder(
-          x.imageFile,
-          { name }
-        ),
+        new AttachmentBuilder(x.imageFile, {
+          name,
+        }),
       ],
     };
   }
@@ -639,8 +724,9 @@ function media(x, e) {
 function matchCard(m) {
   const open = isOpen(m);
 
-  const e = embed(m.title)
-    .setColor(open ? COLOR : 0x7F1D1D);
+  const e = embed(m.title).setColor(
+    open ? COLOR : 0x7F1D1D
+  );
 
   const lines = [
     m.description
@@ -722,18 +808,20 @@ function myCard(s, m, userId) {
     '✅ Ton pronostic est enregistré'
   )
     .setColor(0x22C55E)
-    .setDescription([
-      `**${safe(m.title)}**`,
-      '',
-      `${EMOJIS[b.choice]} **${safe(m['choice' + b.choice + 'Label'])}**`,
-      '',
-      `${ICON} **${BASE[b.choice] * (b.boosted ? 2 : 1)} ${UNIT}** si ton choix est gagnant.${b.boosted ? ' Boost x2 activé.' : ''}`,
-      '',
-      'Ton choix est définitif.',
-      m.result
-        ? `\nRésultat : **${earned(m, b)} ${UNIT} gagnés**.`
-        : '',
-    ].join('\n'));
+    .setDescription(
+      [
+        `**${safe(m.title)}**`,
+        '',
+        `${EMOJIS[b.choice]} **${safe(m['choice' + b.choice + 'Label'])}**`,
+        '',
+        `${ICON} **${BASE[b.choice] * (b.boosted ? 2 : 1)} ${UNIT}** si ton choix est gagnant.${b.boosted ? ' Boost x2 activé.' : ''}`,
+        '',
+        'Ton choix est définitif.',
+        m.result
+          ? `\nRésultat : **${earned(m, b)} ${UNIT} gagnés**.`
+          : '',
+      ].join('\n')
+    );
 
   return {
     content: '',
@@ -744,129 +832,120 @@ function myCard(s, m, userId) {
 }
 
 function weekMatches(s, p) {
-  return Object.values(s.matches)
-    .filter(
-      m =>
-        m.status !== 'deleted' &&
-        m.channelId ===
-          (p.matchesChannelId || p.channelId) &&
-        m.date >= p.start &&
-        m.date <= p.end
-    )
-    .sort(
-      (a, b) =>
-        a.date.localeCompare(b.date) ||
-        closeAt(a) - closeAt(b)
-    );
+  return programBlocks(p).flatMap(([key]) =>
+    fixtures(p.blocks[key]).map(title => ({
+      title,
+      group: key,
+    }))
+  );
 }
 
-function weekCard(s, p, page = 0) {
-  const all = weekMatches(s, p);
-  const pages = Math.max(
-    1,
-    Math.ceil(all.length / 8)
-  );
+function weekCard(s, p) {
+  const groups = programBlocks(p);
 
-  page = Math.max(
-    0,
-    Math.min(Number(page) || 0, pages - 1)
-  );
-
-  const selected = all.slice(
-    page * 8,
-    page * 8 + 8
-  );
-
-  const lines = [];
-
-  for (
-    let d = p.start;
-    d <= p.end;
-    d = shift(d, 1)
-  ) {
-    lines.push(
-      `📅 **${dateLabel(d).toUpperCase()}**`
-    );
-
-    const todays = all.filter(
-      m => m.date === d
-    );
-
-    const shown = selected.filter(
-      m => m.date === d
-    );
-
-    if (!todays.length) {
-      lines.push(
-        'Pas de MatchDay programmé.'
-      );
-    } else if (!shown.length) {
-      lines.push(
-        'Affiches à retrouver sur les autres pages.'
-      );
-    } else {
-      for (const m of shown) {
-        lines.push(`• ${safe(m.title)}`);
-      }
-
-      if (shown.length < todays.length) {
-        lines.push(
-          '*Suite sur les autres pages.*'
-        );
-      }
-    }
-
-    lines.push('');
-  }
-
-  const title = embed(p.title)
-    .setDescription([
+  const e = embed(p.title).setDescription(
+    [
       p.description
-        ? safe(p.description).slice(0, 900)
-        : 'Une semaine de pronostics vous attend !',
+        ? safe(p.description)
+        : EDITION.description,
       '',
       `🗓️ **Du ${dateLabel(p.start)} au ${dateLabel(p.end)}**`,
-      '',
-      `🎯 **${all.length} MatchDay${all.length > 1 ? 's' : ''} au programme**`,
+      `🎯 **${groups.length} MatchDay${groups.length > 1 ? 's' : ''} au programme**`,
       '',
       `Rendez-vous dans <#${p.matchesChannelId || p.channelId}> pour participer aux matchs du jour.`,
       '',
-      `${ICON} Cumule des **${UNIT}** tout au long de la semaine pour grimper au classement.`,
+      `${ICON} Cumule un **MAXIMUM de ${UNIT}** tout au long de la semaine pour grimper au classement.`,
       'Chaque MatchDay propose 3 choix : **2, 4 ou 8 points**, avec **un boost x2 par journée**.',
-      pages > 1
-        ? '\n👇 Utilise les flèches pour voir toutes les affiches.'
-        : '',
-    ].join('\n'));
+    ].join('\n')
+  );
 
-  const details = embed('LE PROGRAMME')
-    .setDescription(lines.join('\n'))
-    .setFooter({
-      text:
-        `Betclic MatchDay | Programme ${p.id} | ` +
-        `Page ${page + 1}/${pages}`,
+  for (const [key, label] of groups) {
+    const date =
+      key === 'weekend'
+        ? ''
+        : (() => {
+            const target = {
+              mardi: 2,
+              mercredi: 3,
+              jeudi: 4,
+            }[key];
+
+            for (
+              let d = p.start;
+              d <= p.end;
+              d = shift(d, 1)
+            ) {
+              if (
+                new Date(
+                  d + 'T12:00:00Z'
+                ).getUTCDay() === target
+              ) {
+                return (
+                  ' ' +
+                  d.slice(8) +
+                  '/' +
+                  d.slice(5, 7)
+                );
+              }
+            }
+
+            return '';
+          })();
+
+    const chunks = [];
+    let chunk = '';
+
+    for (const fixture of fixtures(
+      p.blocks[key]
+    )) {
+      const line = '• ' + safe(fixture);
+
+      if (
+        chunk &&
+        chunk.length + line.length + 1 > 1024
+      ) {
+        chunks.push(chunk);
+        chunk = '';
+      }
+
+      chunk += (chunk ? '\n' : '') + line;
+    }
+
+    if (chunk) chunks.push(chunk);
+
+    chunks.forEach((value, n) =>
+      e.addFields({
+        name:
+          label +
+          date +
+          (n ? ' (suite)' : ''),
+        value,
+        inline: false,
+      })
+    );
+  }
+
+  e.addFields({
+    name: '🕒 Horaires',
+    value:
+      'Heure de Paris. Sous réserve de modification du calendrier.',
+  });
+
+  if (p.rulesChannelId) {
+    e.addFields({
+      name: '📋 Règlement',
+      value: `<#${p.rulesChannelId}>`,
     });
+  }
+
+  e.setFooter({
+    text: `Betclic MatchDay | Programme ${p.id} | Freebets = crédits de jeu non retirables`,
+  });
 
   return {
-    embeds: [title, details],
-    ...media(p, title),
-    components: pages > 1
-      ? [
-          row(
-            button(
-              `md:week:${p.id}:${page - 1}`,
-              '← Précédent',
-              ButtonStyle.Secondary,
-              page === 0
-            ),
-            button(
-              `md:week:${p.id}:${page + 1}`,
-              'Suivant →',
-              ButtonStyle.Secondary,
-              page === pages - 1
-            )
-          ),
-        ]
-      : [],
+    embeds: [e],
+    ...media(p, e),
+    components: [],
     allowedMentions: quiet,
   };
 }
@@ -916,8 +995,7 @@ function staffCard(x, kind) {
       },
       {
         name: 'Salon des matchs',
-        value:
-          `<#${x.matchesChannelId || x.channelId}>`,
+        value: `<#${x.matchesChannelId || x.channelId}>`,
       }
     );
   }
@@ -927,8 +1005,7 @@ function staffCard(x, kind) {
       embed(x.title)
         .addFields(fields)
         .setFooter({
-          text:
-            `Betclic MatchDay | Staff ${kind} ${x.id}`,
+          text: `Betclic MatchDay | Staff ${kind} ${x.id}`,
         }),
     ],
     allowedMentions: quiet,
@@ -937,6 +1014,7 @@ function staffCard(x, kind) {
 
 function rankCard(s, r, page = 0) {
   const all = rank(s, r);
+
   const pages = Math.max(
     1,
     Math.ceil(all.length / 20)
@@ -968,11 +1046,10 @@ function rankCard(s, r, page = 0) {
             `${['🥇', '🥈', '🥉'][page * 20 + n] || `**${page * 20 + n + 1}.**`} <@${u.id}> | ${ICON} **${u.points} ${UNIT}**`
         )
         .join('\n') ||
-      'Aucun point pour le moment.'
+        'Aucun point pour le moment.'
     )
     .setFooter({
-      text:
-        `Betclic MatchDay | Page ${page + 1}/${pages}`,
+      text: `Betclic MatchDay | Page ${page + 1}/${pages}`,
     });
 
   if (pending) {
@@ -992,24 +1069,25 @@ function rankCard(s, r, page = 0) {
   return {
     content: '',
     embeds: [e],
-    components: pages > 1
-      ? [
-          row(
-            button(
-              `md:rank:${r.start || 'all'}:${r.end || 'all'}:${page - 1}`,
-              '←',
-              ButtonStyle.Secondary,
-              page === 0
+    components:
+      pages > 1
+        ? [
+            row(
+              button(
+                `md:rank:${r.start || 'all'}:${r.end || 'all'}:${page - 1}`,
+                '←',
+                2,
+                page === 0
+              ),
+              button(
+                `md:rank:${r.start || 'all'}:${r.end || 'all'}:${page + 1}`,
+                '→',
+                2,
+                page === pages - 1
+              )
             ),
-            button(
-              `md:rank:${r.start || 'all'}:${r.end || 'all'}:${page + 1}`,
-              '→',
-              ButtonStyle.Secondary,
-              page === pages - 1
-            )
-          ),
-        ]
-      : [],
+          ]
+        : [],
     allowedMentions: quiet,
   };
 }
@@ -1017,7 +1095,8 @@ function rankCard(s, r, page = 0) {
 function matchOptions(c, editing = false) {
   if (editing) {
     c.addStringOption(o =>
-      o.setName('match_id')
+      o
+        .setName('match_id')
         .setDescription(
           'ID dans le salon staff ou /list-matches'
         )
@@ -1026,46 +1105,52 @@ function matchOptions(c, editing = false) {
   }
 
   c.addStringOption(o =>
-    o.setName('titre')
-      .setDescription('Titre libre du MatchDay')
+    o
+      .setName('titre')
+      .setDescription(
+        'Titre libre du MatchDay'
+      )
       .setMaxLength(180)
       .setRequired(!editing)
-  )
-    .addStringOption(o =>
-      o.setName('fermeture')
-        .setDescription(
-          'Fin des mises : AAAA-MM-JJ HH:mm, heure configurée'
-        )
-        .setRequired(!editing)
-    );
+  ).addStringOption(o =>
+    o
+      .setName('fermeture')
+      .setDescription(
+        'Fin des mises : AAAA-MM-JJ HH:mm, heure configurée'
+      )
+      .setRequired(!editing)
+  );
 
   for (const n of [1, 2, 3]) {
     c.addStringOption(o =>
-      o.setName(`choix${n}_label`)
+      o
+        .setName(`choix${n}_label`)
         .setDescription(
           `Choix ${n} : ${BASE[n]} points`
         )
         .setMaxLength(180)
         .setRequired(!editing)
-    )
-      .addStringOption(o =>
-        o.setName(`choix${n}_cote`)
-          .setDescription(
-            `Cote indicative du choix ${n}`
-          )
-          .setMaxLength(20)
-          .setRequired(!editing)
-      );
+    ).addStringOption(o =>
+      o
+        .setName(`choix${n}_cote`)
+        .setDescription(
+          `Cote indicative du choix ${n}`
+        )
+        .setMaxLength(20)
+        .setRequired(!editing)
+    );
   }
 
   c.addStringOption(o =>
-    o.setName('publication')
+    o
+      .setName('publication')
       .setDescription(
         'AAAA-MM-JJ HH:mm, sinon publication immédiate'
       )
   )
     .addChannelOption(o =>
-      o.setName('channel')
+      o
+        .setName('channel')
         .setDescription(
           'Salon cible, sinon salon actuel'
         )
@@ -1075,27 +1160,31 @@ function matchOptions(c, editing = false) {
         )
     )
     .addStringOption(o =>
-      o.setName('journee')
+      o
+        .setName('journee')
         .setDescription(
           'Journée sportive AAAA-MM-JJ, sinon déduite du début du match'
         )
     )
     .addStringOption(o =>
-      o.setName('texte')
+      o
+        .setName('texte')
         .setDescription(
           'Présentation facultative'
         )
         .setMaxLength(1000)
     )
     .addStringOption(o =>
-      o.setName('image')
+      o
+        .setName('image')
         .setDescription(
           'URL du visuel, facultatif'
         )
         .setMaxLength(1000)
     )
     .addRoleOption(o =>
-      o.setName('notification')
+      o
+        .setName('notification')
         .setDescription(
           'Rôle à notifier à la publication, facultatif'
         )
@@ -1103,17 +1192,18 @@ function matchOptions(c, editing = false) {
 
   if (editing) {
     c.addBooleanOption(o =>
-      o.setName('retirer_image')
+      o
+        .setName('retirer_image')
         .setDescription(
           'Supprimer le visuel'
         )
-    )
-      .addBooleanOption(o =>
-        o.setName('retirer_notification')
-          .setDescription(
-            'Retirer la notification'
-          )
-      );
+    ).addBooleanOption(o =>
+      o
+        .setName('retirer_notification')
+        .setDescription(
+          'Retirer la notification'
+        )
+    );
   }
 
   return c;
@@ -1122,7 +1212,8 @@ function matchOptions(c, editing = false) {
 function programOptions(c, editing = false) {
   if (editing) {
     c.addStringOption(o =>
-      o.setName('programme_id')
+      o
+        .setName('programme_id')
         .setDescription(
           'ID du programme dans le salon staff'
         )
@@ -1130,41 +1221,29 @@ function programOptions(c, editing = false) {
     );
   }
 
-  c.addStringOption(o =>
-    o.setName('titre')
+  c.addChannelOption(o =>
+    o
+      .setName('channel')
       .setDescription(
-        'Titre libre de l’annonce'
+        'Salon de l’annonce, sinon salon actuel'
       )
-      .setMaxLength(180)
-      .setRequired(!editing)
+      .addChannelTypes(
+        ChannelType.GuildText,
+        ChannelType.GuildAnnouncement
+      )
   )
     .addStringOption(o =>
-      o.setName('semaine')
+      o
+        .setName('publication')
         .setDescription(
-          'Une date AAAA-MM-JJ : semaine complète du lundi au dimanche'
-        )
-        .setRequired(!editing)
-    )
-    .addStringOption(o =>
-      o.setName('publication')
-        .setDescription(
-          'AAAA-MM-JJ HH:mm, sinon immédiate à la création'
+          'AAAA-MM-JJ HH:mm, heure de Paris, sinon immédiate'
         )
     )
     .addChannelOption(o =>
-      o.setName('channel')
+      o
+        .setName('salon_matchs')
         .setDescription(
-          'Salon de l’annonce, sinon salon actuel'
-        )
-        .addChannelTypes(
-          ChannelType.GuildText,
-          ChannelType.GuildAnnouncement
-        )
-    )
-    .addChannelOption(o =>
-      o.setName('salon_matchs')
-        .setDescription(
-          'Salon des MatchDays à inclure, sinon même salon que l’annonce'
+          'Salon où les membres participent aux MatchDays'
         )
         .addChannelTypes(
           ChannelType.GuildText,
@@ -1172,73 +1251,125 @@ function programOptions(c, editing = false) {
         )
     )
     .addStringOption(o =>
-      o.setName('texte')
+      o
+        .setName('image')
         .setDescription(
-          'Introduction personnalisée'
+          'Lien du visuel de l’annonce'
         )
         .setMaxLength(1000)
     )
     .addStringOption(o =>
-      o.setName('image')
+      o
+        .setName('titre')
         .setDescription(
-          'Lien du visuel de la semaine'
+          'Titre libre, sinon Betclic MatchDay de la Muerte'
+        )
+        .setMaxLength(180)
+    )
+    .addStringOption(o =>
+      o
+        .setName('texte')
+        .setDescription(
+          'Introduction, sinon le texte de Maxime avec 1 000 € de Freebets'
         )
         .setMaxLength(1000)
     )
-    .addRoleOption(o =>
-      o.setName('notification')
+    .addStringOption(o =>
+      o
+        .setName('debut')
         .setDescription(
-          'Rôle à notifier, facultatif'
+          'AAAA-MM-JJ, sinon 2026-10-20 pour cette édition'
+        )
+    )
+    .addStringOption(o =>
+      o
+        .setName('fin')
+        .setDescription(
+          'AAAA-MM-JJ, sinon 2026-10-25 pour cette édition'
         )
     );
 
+  for (const key of Object.keys(GROUPS)) {
+    c.addStringOption(o =>
+      o
+        .setName(key)
+        .setDescription(
+          `Affiches du groupe ${key}, séparées par / ; « aucun » pour le retirer`
+        )
+        .setMaxLength(450)
+    );
+  }
+
+  c.addRoleOption(o =>
+    o
+      .setName('notification')
+      .setDescription(
+        'Rôle à notifier à la publication, facultatif'
+      )
+  ).addChannelOption(o =>
+    o
+      .setName('reglement')
+      .setDescription(
+        'Salon du règlement, facultatif'
+      )
+      .addChannelTypes(
+        ChannelType.GuildText,
+        ChannelType.GuildAnnouncement
+      )
+  );
+
   if (editing) {
     c.addBooleanOption(o =>
-      o.setName('retirer_image')
+      o
+        .setName('retirer_image')
         .setDescription(
           'Supprimer le visuel'
         )
-    )
-      .addBooleanOption(o =>
-        o.setName('retirer_notification')
-          .setDescription(
-            'Retirer la notification'
-          )
-      );
+    ).addBooleanOption(o =>
+      o
+        .setName('retirer_notification')
+        .setDescription(
+          'Retirer la notification'
+        )
+    );
   }
 
   return c;
 }
 
 function ranges(c) {
-  return c.addStringOption(o =>
-    o.setName('type')
-      .setDescription(
-        'Semaine actuelle par défaut'
-      )
-      .addChoices(
-        {
-          name: 'Semaine',
-          value: 'week',
-        },
-        {
-          name: 'Journée sportive',
-          value: 'today',
-        },
-        {
-          name: 'Général',
-          value: 'general',
-        }
-      )
-  )
+  return c
     .addStringOption(o =>
-      o.setName('debut')
+      o
+        .setName('type')
+        .setDescription(
+          'Semaine actuelle par défaut'
+        )
+        .addChoices(
+          {
+            name: 'Semaine',
+            value: 'week',
+          },
+          {
+            name: 'Journée sportive',
+            value: 'today',
+          },
+          {
+            name: 'Général',
+            value: 'general',
+          }
+        )
+    )
+    .addStringOption(o =>
+      o
+        .setName('debut')
         .setDescription(
           'Période personnalisée : AAAA-MM-JJ'
         )
     )
     .addStringOption(o =>
-      o.setName('fin')
+      o
+        .setName('fin')
         .setDescription(
           'Fin personnalisée : AAAA-MM-JJ'
         )
@@ -1256,13 +1387,15 @@ const adminCommand = (name, description) =>
 const idOption = (
   c,
   name = 'match_id'
-) => c.addStringOption(o =>
-  o.setName(name)
-    .setDescription(
-      'Identifiant dans la fiche staff'
-    )
-    .setRequired(true)
-);
+) =>
+  c.addStringOption(o =>
+    o
+      .setName(name)
+      .setDescription(
+        'Identifiant dans la fiche staff'
+      )
+      .setRequired(true)
+  );
 
 const commands = [
   matchOptions(
@@ -1301,25 +1434,29 @@ const commands = [
     )
   )
     .addBooleanOption(o =>
-      o.setName('choix1')
+      o
+        .setName('choix1')
         .setDescription(
           'Le choix 1 est gagnant'
         )
     )
     .addBooleanOption(o =>
-      o.setName('choix2')
+      o
+        .setName('choix2')
         .setDescription(
           'Le choix 2 est gagnant'
         )
     )
     .addBooleanOption(o =>
-      o.setName('choix3')
+      o
+        .setName('choix3')
         .setDescription(
           'Le choix 3 est gagnant'
         )
     )
     .addBooleanOption(o =>
-      o.setName('annule')
+      o
+        .setName('annule')
         .setDescription(
           'Annuler le match : aucun point'
         )
@@ -1354,24 +1491,24 @@ const commands = [
       .setDescription(
         'Afficher le classement sur demande'
       )
-  )
-    .addBooleanOption(o =>
-      o.setName('prive')
-        .setDescription(
-          'Afficher uniquement pour toi'
-        )
-    ),
+  ).addBooleanOption(o =>
+    o
+      .setName('prive')
+      .setDescription(
+        'Afficher uniquement pour toi'
+      )
+  ),
 
   adminCommand(
     'list-matches',
     'Lister les MatchDays et les programmes'
-  )
-    .addStringOption(o =>
-      o.setName('semaine')
-        .setDescription(
-          'Filtrer sur une date AAAA-MM-JJ de la semaine'
-        )
-    ),
+  ).addStringOption(o =>
+    o
+      .setName('semaine')
+      .setDescription(
+        'Filtrer sur une date AAAA-MM-JJ de la semaine'
+      )
+  ),
 
   ranges(
     adminCommand(
@@ -1436,7 +1573,8 @@ async function cacheImage(x, dir) {
   need(
     Number(
       r.headers.get('content-length') || 0
-    ) <= 8 * 1024 * 1024,
+    ) <=
+      8 * 1024 * 1024,
     'Image trop lourde : 8 Mo maximum.'
   );
 
@@ -1463,7 +1601,10 @@ async function cacheImage(x, dir) {
 
   x.imageFile = path.join(
     folder,
-    `${x.id}-${createHash('sha256').update(buffer).digest('hex').slice(0, 12)}${ext}`
+    `${x.id}-${createHash('sha256')
+      .update(buffer)
+      .digest('hex')
+      .slice(0, 12)}${ext}`
   );
 
   await fs.writeFile(
@@ -1475,8 +1616,10 @@ async function cacheImage(x, dir) {
 
 async function run() {
   const env = process.env;
+
   const guildId =
     env.DISCORD_GUILD_ID?.trim();
+
   const staffId =
     env.DISCORD_ADMIN_CHANNEL_ID?.trim();
 
@@ -1523,12 +1666,13 @@ async function run() {
   let stopping = false;
   let timer;
 
-  const admin = i => need(
-    i.memberPermissions?.has(
-      P.Administrator
-    ),
-    'Cette commande est réservée aux administrateurs.'
-  );
+  const admin = i =>
+    need(
+      i.memberPermissions?.has(
+        P.Administrator
+      ),
+      'Cette commande est réservée aux administrateurs.'
+    );
 
   const log = (label, e) => {
     const message = String(
@@ -1544,7 +1688,8 @@ async function run() {
   };
 
   async function channel(id) {
-    const c = await client.channels.fetch(id);
+    const c =
+      await client.channels.fetch(id);
 
     need(
       c &&
@@ -1589,18 +1734,21 @@ async function run() {
     let before;
 
     for (let n = 0; n < 100; n++) {
-      const list = await c.messages.fetch({
-        limit: 100,
-        ...(before ? { before } : {}),
-      });
+      const list =
+        await c.messages.fetch({
+          limit: 100,
+          ...(before ? { before } : {}),
+        });
 
       if (!list.size) return null;
 
       const found = list.find(
         m =>
           m.author.id === client.user.id &&
-          m.embeds.some(
-            e => e.footer?.text?.startsWith(marker)
+          m.embeds.some(e =>
+            e.footer?.text?.startsWith(
+              marker
+            )
           )
       );
 
@@ -1677,9 +1825,9 @@ async function run() {
           ...payload,
           nonce: BigInt(
             '0x' +
-            digest(
-              `staff:${kind}:${x.id}`
-            ).slice(0, 16)
+              digest(
+                `staff:${kind}:${x.id}`
+              ).slice(0, 16)
           ).toString(),
           enforceNonce: true,
         });
@@ -1732,7 +1880,8 @@ async function run() {
       if (!x.missed) {
         await store.change(db => {
           db.matches[x.id].missed = true;
-          db.matches[x.id].status = 'closed';
+          db.matches[x.id].status =
+            'closed';
           db.matches[x.id].version++;
         });
 
@@ -1758,8 +1907,8 @@ async function run() {
         });
 
     const hash = digest({
-      embeds: payload.embeds.map(
-        e => e.toJSON()
+      embeds: payload.embeds.map(e =>
+        e.toJSON()
       ),
       components: payload.components.map(
         r => r.toJSON()
@@ -1857,42 +2006,44 @@ async function run() {
             : quiet,
           nonce: BigInt(
             '0x' +
-            digest(
-              `${kind}:${x.id}:${x.sendingAt}`
-            ).slice(0, 16)
+              digest(
+                `${kind}:${x.id}:${x.sendingAt}`
+              ).slice(0, 16)
           ).toString(),
           enforceNonce: true,
         });
 
-    const remove = await store.change(db => {
-      const latest = db[kind][x.id];
+    const remove =
+      await store.change(db => {
+        const latest = db[kind][x.id];
 
-      latest.messageId = message.id;
-      latest.postChannelId = x.channelId;
-
-      if (
-        latest.status === 'deleted'
-      ) {
-        return true;
-      }
-
-      latest.published = true;
-
-      if (
-        latest.version === x.version
-      ) {
-        latest.publicHash = hash;
-        latest.dirty = false;
+        latest.messageId = message.id;
+        latest.postChannelId =
+          x.channelId;
 
         if (
-          latest.status === 'scheduled'
+          latest.status === 'deleted'
         ) {
-          latest.status = 'open';
+          return true;
         }
-      }
 
-      return false;
-    });
+        latest.published = true;
+
+        if (
+          latest.version === x.version
+        ) {
+          latest.publicHash = hash;
+          latest.dirty = false;
+
+          if (
+            latest.status === 'scheduled'
+          ) {
+            latest.status = 'open';
+          }
+        }
+
+        return false;
+      });
 
     if (remove) {
       await message.delete();
@@ -1918,16 +2069,20 @@ async function run() {
       const current = await store.read();
 
       if (
-        Object.values(current.matches).some(
+        Object.values(
+          current.matches
+        ).some(
           m =>
             m.status === 'open' &&
             closeAt(m) <= Date.now()
         )
       ) {
         await store.change(s => {
-          for (const m of Object.values(
-            s.matches
-          )) {
+          for (
+            const m of Object.values(
+              s.matches
+            )
+          ) {
             if (
               m.status === 'open' &&
               closeAt(m) <= Date.now()
@@ -1957,13 +2112,19 @@ async function run() {
           try {
             await syncStaff(x, kind);
           } catch (e) {
-            log(`Fiche staff ${x.id}`, e);
+            log(
+              `Fiche staff ${x.id}`,
+              e
+            );
           }
 
           try {
             await publish(x, kind, s);
           } catch (e) {
-            log(`Publication ${x.id}`, e);
+            log(
+              `Publication ${x.id}`,
+              e
+            );
           }
         }
       }
@@ -1981,7 +2142,8 @@ async function run() {
       s.pending[token] = {
         ...data,
         uid: i.user.id,
-        expires: Date.now() + 900000,
+        expires:
+          Date.now() + 900000,
       };
     });
 
@@ -2034,10 +2196,12 @@ async function run() {
       name === 'edit-match'
     ) {
       const o = i.options;
+
       const editing =
         name === 'edit-match';
 
-      const state = await store.read();
+      const state =
+        await store.read();
 
       const old = editing
         ? getMatch(
@@ -2090,13 +2254,14 @@ async function run() {
             `choix${n}_label`
           ) !== null
         ) {
-          m[`choice${n}Label`] = clean(
-            o.getString(
-              `choix${n}_label`
-            ),
-            180,
-            'Choix'
-          );
+          m[`choice${n}Label`] =
+            clean(
+              o.getString(
+                `choix${n}_label`
+              ),
+              180,
+              'Choix'
+            );
         }
 
         if (
@@ -2104,11 +2269,12 @@ async function run() {
             `choix${n}_cote`
           ) !== null
         ) {
-          m[`choice${n}Odds`] = odds(
-            o.getString(
-              `choix${n}_cote`
-            )
-          );
+          m[`choice${n}Odds`] =
+            odds(
+              o.getString(
+                `choix${n}_cote`
+              )
+            );
         }
       }
 
@@ -2128,9 +2294,8 @@ async function run() {
       if (
         o.getChannel('channel')
       ) {
-        m.channelId = o.getChannel(
-          'channel'
-        ).id;
+        m.channelId =
+          o.getChannel('channel').id;
       }
 
       m.channelId ||= i.channelId;
@@ -2145,12 +2310,12 @@ async function run() {
       if (
         o.getString('texte') !== null
       ) {
-        m.description = o
-          .getString('texte')
-          .replace(
-            /[\u2013\u2014]/g,
-            '-'
-          );
+        m.description =
+          o.getString('texte')
+            .replace(
+              /[\u2013\u2014]/g,
+              '-'
+            );
       }
 
       if (
@@ -2164,9 +2329,8 @@ async function run() {
       if (
         o.getRole('notification')
       ) {
-        m.roleId = o.getRole(
-          'notification'
-        ).id;
+        m.roleId =
+          o.getRole('notification').id;
       }
 
       if (
@@ -2231,10 +2395,7 @@ async function run() {
 
       const sensitive =
         changedChoices ||
-        (
-          old &&
-          m.date !== old.date
-        );
+        (old && m.date !== old.date);
 
       await channel(m.channelId);
 
@@ -2250,10 +2411,8 @@ async function run() {
 
       await store.change(s => {
         if (old) {
-          const latest = getMatch(
-            s,
-            m.id
-          );
+          const latest =
+            getMatch(s, m.id);
 
           need(
             latest.version ===
@@ -2299,7 +2458,6 @@ async function run() {
 
         m.version++;
         m.dirty = true;
-
         s.matches[m.id] = m;
         s.bets[m.id] ||= {};
       });
@@ -2307,12 +2465,7 @@ async function run() {
       void tick();
 
       return i.editReply(
-        `✅ MatchDay ${editing ? 'modifié' : 'créé'}.\n` +
-        `ID : \`${m.id}\`\n` +
-        `Publication : ${time(m.publishAt)}\n` +
-        `Fin des mises : ${time(closeAt(m))}\n` +
-        `Journée sportive : ${m.date}\n` +
-        `Salon : <#${m.channelId}>`
+        `✅ MatchDay ${editing ? 'modifié' : 'créé'}.\nID : \`${m.id}\`\nPublication : ${time(m.publishAt)}\nFin des mises : ${time(closeAt(m))}\nJournée sportive : ${m.date}\nSalon : <#${m.channelId}>`
       );
     }
 
@@ -2321,6 +2474,7 @@ async function run() {
       name === 'edit-week'
     ) {
       const o = i.options;
+
       const editing =
         name === 'edit-week';
 
@@ -2328,9 +2482,7 @@ async function run() {
 
       const old = editing
         ? s.programs[
-            o.getString(
-              'programme_id'
-            )
+            o.getString('programme_id')
           ]
         : null;
 
@@ -2353,7 +2505,14 @@ async function run() {
             publishAt: Date.now(),
             imageUrl: '',
             imageFile: '',
-            description: '',
+            description:
+              EDITION.description,
+            title: EDITION.title,
+            start: EDITION.start,
+            end: EDITION.end,
+            blocks: copy(
+              EDITION.blocks
+            ),
             roleId: null,
             messageId: null,
           };
@@ -2369,19 +2528,65 @@ async function run() {
       }
 
       if (
-        o.getString('semaine')
+        o.getString('debut')
       ) {
-        p.start = monday(
-          dateKey(
-            o.getString('semaine')
-          )
-        );
-
-        p.end = shift(
-          p.start,
-          6
+        p.start = dateKey(
+          o.getString('debut')
         );
       }
+
+      if (
+        o.getString('fin')
+      ) {
+        p.end = dateKey(
+          o.getString('fin')
+        );
+      }
+
+      need(
+        Date.parse(
+          p.end + 'T12:00:00Z'
+        ) -
+          Date.parse(
+            p.start + 'T12:00:00Z'
+          ) <=
+          6 * 86400000,
+        'Le programme doit tenir sur sept jours maximum.'
+      );
+
+      for (
+        const key of Object.keys(
+          GROUPS
+        )
+      ) {
+        if (
+          o.getString(key) !== null
+        ) {
+          const text =
+            o.getString(key)
+              .trim()
+              .replace(
+                /[\u2013\u2014]/g,
+                '-'
+              );
+
+          p.blocks[key] =
+            /^aucun$/i.test(text)
+              ? ''
+              : text;
+        }
+      }
+
+      if (
+        o.getChannel('reglement')
+      ) {
+        p.rulesChannelId =
+          o.getChannel(
+            'reglement'
+          ).id;
+      }
+
+      validateProgram(p);
 
       if (
         o.getString('publication')
@@ -2392,9 +2597,7 @@ async function run() {
         );
 
         p.publishAt = parseTime(
-          o.getString(
-            'publication'
-          )
+          o.getString('publication')
         );
 
         need(
@@ -2406,9 +2609,8 @@ async function run() {
       if (
         o.getChannel('channel')
       ) {
-        p.channelId = o.getChannel(
-          'channel'
-        ).id;
+        p.channelId =
+          o.getChannel('channel').id;
       }
 
       p.channelId ||= i.channelId;
@@ -2428,12 +2630,12 @@ async function run() {
       if (
         o.getString('texte') !== null
       ) {
-        p.description = o
-          .getString('texte')
-          .replace(
-            /[\u2013\u2014]/g,
-            '-'
-          );
+        p.description =
+          o.getString('texte')
+            .replace(
+              /[\u2013\u2014]/g,
+              '-'
+            );
       }
 
       if (
@@ -2447,9 +2649,8 @@ async function run() {
       if (
         o.getRole('notification')
       ) {
-        p.roleId = o.getRole(
-          'notification'
-        ).id;
+        p.roleId =
+          o.getRole('notification').id;
       }
 
       if (
@@ -2469,6 +2670,14 @@ async function run() {
         p.roleId = null;
       }
 
+      const preview = weekCard(s, p);
+
+      need(
+        preview.embeds[0].length <=
+          6000,
+        'Le programme est trop long pour Discord : raccourcis le texte ou les affiches.'
+      );
+
       await channel(p.channelId);
       await channel(
         p.matchesChannelId
@@ -2484,10 +2693,10 @@ async function run() {
         );
       }
 
-      await store.change(s => {
+      await store.change(db => {
         if (old) {
           const latest =
-            s.programs[p.id];
+            db.programs[p.id];
 
           need(
             latest.version ===
@@ -2498,8 +2707,7 @@ async function run() {
           Object.assign(p, {
             published:
               latest.published,
-            status:
-              latest.status,
+            status: latest.status,
             messageId:
               latest.messageId,
             postChannelId:
@@ -2517,19 +2725,13 @@ async function run() {
 
         p.version++;
         p.dirty = true;
-
-        s.programs[p.id] = p;
+        db.programs[p.id] = p;
       });
 
       void tick();
 
       return i.editReply(
-        `✅ Programme ${editing ? 'modifié' : 'créé'}.\n` +
-        `ID : \`${p.id}\`\n` +
-        `Du ${p.start} au ${p.end}\n` +
-        `Publication : ${time(p.publishAt)}\n` +
-        `Salon : <#${p.channelId}>\n` +
-        `Les MatchDays créés dans <#${p.matchesChannelId}> pour cette semaine s’ajoutent automatiquement au programme.`
+        `✅ Programme ${editing ? 'modifié' : 'créé'}.\nID : \`${p.id}\`\nDu ${p.start} au ${p.end}\nPublication : ${time(p.publishAt)}\nSalon : <#${p.channelId}>\n${programBlocks(p).length} rendez-vous et ${weekMatches(s, p).length} affiches, indépendants des paris.\nPour modifier les affiches : /edit-week.`
       );
     }
 
@@ -2571,21 +2773,17 @@ async function run() {
           'match_id'
         );
 
-      const winners = [
-        1,
-        2,
-        3,
-      ].filter(n =>
-        i.options.getBoolean(
-          `choix${n}`
-        )
-      );
+      const winners =
+        [1, 2, 3].filter(n =>
+          i.options.getBoolean(
+            `choix${n}`
+          )
+        );
 
       need(
         i.options.getBoolean(
           'annule'
-        ) ||
-          winners.length,
+        ) || winners.length,
         'Sélectionne les choix gagnants ou annule:true si aucun choix ne gagne.'
       );
 
@@ -2598,10 +2796,7 @@ async function run() {
       );
 
       await store.change(s => {
-        const m = getMatch(
-          s,
-          id
-        );
+        const m = getMatch(s, id);
 
         need(
           m.published,
@@ -2699,38 +2894,37 @@ async function run() {
           )
         : null;
 
-      const items = Object.values(
-        s.matches
-      )
-        .filter(
-          m =>
-            m.status !== 'deleted' &&
-            (
-              !start ||
+      const items =
+        Object.values(
+          s.matches
+        )
+          .filter(
+            m =>
+              m.status !==
+                'deleted' &&
               (
-                m.date >= start &&
-                m.date <= shift(
-                  start,
-                  6
+                !start ||
+                (
+                  m.date >= start &&
+                  m.date <=
+                    shift(start, 6)
                 )
               )
-            )
-        )
-        .sort(
-          (a, b) =>
-            a.date.localeCompare(
-              b.date
-            ) ||
-            closeAt(a) -
-              closeAt(b)
-        );
+          )
+          .sort(
+            (a, b) =>
+              a.date.localeCompare(
+                b.date
+              ) ||
+              closeAt(a) -
+                closeAt(b)
+          );
 
-      const lines = items.map(
-        m =>
-          `${m.date} | ${m.title} | ${m.status}\n` +
-          `ID: ${m.id}\n` +
-          `Publication: ${time(m.publishAt)} | Fermeture: ${time(closeAt(m))}\n`
-      );
+      const lines =
+        items.map(
+          m =>
+            `${m.date} | ${m.title} | ${m.status}\nID: ${m.id}\nPublication: ${time(m.publishAt)} | Fermeture: ${time(closeAt(m))}\n`
+        );
 
       lines.push(
         '\nPROGRAMMES\n',
@@ -2755,7 +2949,7 @@ async function run() {
           new AttachmentBuilder(
             Buffer.from(
               lines.join('\n') ||
-              'Aucun match'
+                'Aucun match'
             ),
             {
               name:
@@ -2770,42 +2964,43 @@ async function run() {
       name === 'diagnostic'
     ) {
       return i.editReply(
-        `✅ Stockage : ${store.file}\n` +
-        `🕒 Fuseau : ${TZ}\n` +
-        `⚡ Journée du boost : de midi à midi (${TZ})\n` +
-        `📅 ${Object.values(s.matches).filter(m => !m.published && m.status !== 'deleted' && !m.missed).length} matchs à publier\n` +
-        `📣 ${Object.values(s.programs).filter(p => !p.published && p.status !== 'deleted').length} programmes à publier\n` +
-        '🏆 Aucun classement automatique\n' +
-        `💀 Unité : ${UNIT}`
+        `✅ Stockage : ${store.file}\n🕒 Fuseau : ${TZ}\n⚡ Journée du boost : de midi à midi (${TZ})\n📅 ${Object.values(s.matches).filter(m => !m.published && m.status !== 'deleted' && !m.missed).length} matchs à publier\n📣 ${Object.values(s.programs).filter(p => !p.published && p.status !== 'deleted').length} programmes à publier\n🏆 Aucun classement automatique\n💀 Unité : ${UNIT}`
       );
     }
 
     if (
       name === 'export'
     ) {
-      const r = rangeOptions(
-        i.options
-      );
+      const r =
+        rangeOptions(
+          i.options
+        );
 
-      const values = rank(s, r);
+      const values =
+        rank(s, r);
 
-      const rows = [[
-        'match_id',
-        'journee',
-        'titre',
-        'discord_id',
-        'pseudo',
-        'choix',
-        'boost',
-        'points',
-        'resultat',
-      ]];
+      const rows = [
+        [
+          'match_id',
+          'journee',
+          'titre',
+          'discord_id',
+          'pseudo',
+          'choix',
+          'boost',
+          'points',
+          'resultat',
+        ],
+      ];
 
-      for (const m of Object.values(
-        s.matches
-      )) {
+      for (
+        const m of Object.values(
+          s.matches
+        )
+      ) {
         if (
-          m.status === 'deleted' ||
+          m.status ===
+            'deleted' ||
           (
             r.start &&
             m.date < r.start
@@ -2818,34 +3013,35 @@ async function run() {
           continue;
         }
 
-        for (const [id, b] of Object.entries(
-          s.bets[m.id] || {}
-        )) {
+        for (
+          const [id, b] of
+          Object.entries(
+            s.bets[m.id] || {}
+          )
+        ) {
           if (
-            b.revision !==
+            b.revision ===
             m.revision
           ) {
-            continue;
+            rows.push([
+              m.id,
+              m.date,
+              m.title,
+              id,
+              b.username,
+              m[
+                `choice${b.choice}Label`
+              ],
+              b.boosted
+                ? 'oui'
+                : 'non',
+              earned(m, b),
+              m.result === null
+                ? 'en attente'
+                : m.result.join(',') ||
+                  'annulé',
+            ]);
           }
-
-          rows.push([
-            m.id,
-            m.date,
-            m.title,
-            id,
-            b.username,
-            m[
-              `choice${b.choice}Label`
-            ],
-            b.boosted
-              ? 'oui'
-              : 'non',
-            earned(m, b),
-            m.result === null
-              ? 'en attente'
-              : m.result.join(',') ||
-                'annulé',
-          ]);
         }
       }
 
@@ -2860,17 +3056,19 @@ async function run() {
       const file = (
         rows,
         name
-      ) => new AttachmentBuilder(
-        Buffer.from(
-          '\uFEFF' +
-          rows
-            .map(r =>
-              r.map(csv).join(';')
-            )
-            .join('\r\n')
-        ),
-        { name }
-      );
+      ) =>
+        new AttachmentBuilder(
+          Buffer.from(
+            '\uFEFF' +
+              rows
+                .map(r =>
+                  r.map(csv)
+                    .join(';')
+                )
+                .join('\r\n')
+          ),
+          { name }
+        );
 
       return i.editReply({
         content:
@@ -2944,7 +3142,8 @@ async function run() {
 
       action = 'bet';
       value = a.pop();
-      mid = a.slice(1).join('_');
+      mid =
+        a.slice(1).join('_');
     }
 
     if (
@@ -2958,11 +3157,13 @@ async function run() {
       action = 'confirm';
       revision = a.pop();
       value = a.pop();
-      mid = a.slice(1).join('_');
+      mid =
+        a.slice(1).join('_');
     }
 
     if (
-      i.customId === 'cancel_bet'
+      i.customId ===
+      'cancel_bet'
     ) {
       action = 'cancel';
     }
@@ -2990,7 +3191,8 @@ async function run() {
 
         need(
           p &&
-            p.uid === i.user.id &&
+            p.uid ===
+              i.user.id &&
             p.expires >
               Date.now(),
           'Confirmation expirée. Recommence.'
@@ -3000,15 +3202,15 @@ async function run() {
           action === 'yes'
         ) {
           if (
-            p.kind === 'reset'
+            p.kind ===
+            'reset'
           ) {
             need(
               p.fingerprint ===
                 digest({
                   matches:
                     s.matches,
-                  bets:
-                    s.bets,
+                  bets: s.bets,
                   programs:
                     s.programs,
                 }),
@@ -3030,13 +3232,18 @@ async function run() {
                 copy(s.boosts),
             });
 
-            for (const table of [
-              'matches',
-              'programs',
-            ]) {
-              for (const x of Object.values(
-                s[table]
-              )) {
+            for (
+              const table of [
+                'matches',
+                'programs',
+              ]
+            ) {
+              for (
+                const x of
+                Object.values(
+                  s[table]
+                )
+              ) {
                 x.status =
                   'deleted';
                 x.version++;
@@ -3048,7 +3255,9 @@ async function run() {
             s.boosts = {};
           } else {
             const x =
-              s[p.table][p.id];
+              s[p.table][
+                p.id
+              ];
 
             need(
               x &&
@@ -3064,7 +3273,7 @@ async function run() {
               data: copy(x),
               bets:
                 p.table ===
-                  'matches'
+                'matches'
                   ? copy(
                       s.bets[
                         x.id
@@ -3075,16 +3284,23 @@ async function run() {
 
             x.status =
               'deleted';
+
             x.version++;
             x.dirty = true;
 
-            for (const u of Object.values(
-              s.users
-            )) {
+            for (
+              const u of
+              Object.values(
+                s.users
+              )
+            ) {
               u.totalPoints = 0;
             }
 
-            for (const r of rank(s)) {
+            for (
+              const r of
+              rank(s)
+            ) {
               if (
                 s.users[r.id]
               ) {
@@ -3097,7 +3313,9 @@ async function run() {
           }
         }
 
-        delete s.pending[mid];
+        delete s.pending[
+          mid
+        ];
       });
 
       void tick();
@@ -3124,7 +3342,8 @@ async function run() {
       need(
         p &&
           p.published &&
-          p.status !== 'deleted',
+          p.status !==
+            'deleted',
         'Programme indisponible.'
       );
 
@@ -3178,7 +3397,9 @@ async function run() {
     }
 
     if (
-      s.bets[mid]?.[i.user.id]
+      s.bets[mid]?.[
+        i.user.id
+      ]
     ) {
       return i.editReply(
         myCard(
@@ -3194,7 +3415,8 @@ async function run() {
       'Les mises sont fermées.'
     );
 
-    const n = Number(value);
+    const n =
+      Number(value);
 
     need(
       BASE[n],
@@ -3219,21 +3441,23 @@ async function run() {
 
       const e = embed(
         'Confirme ton pronostic'
-      ).setDescription([
-        `**${safe(m.title)}**`,
-        '',
-        `${EMOJIS[n]} **${safe(m['choice' + n + 'Label'])}**`,
-        '',
-        `${ICON} **${BASE[n]} ${UNIT}** si ton choix est gagnant.`,
-        '',
-        boost
-          ? `⚡ Avec le boost x2 : **${BASE[n] * 2} ${UNIT}**.`
-          : 'Ton boost de cette journée est déjà utilisé.',
-        '',
-        'Une fois confirmé, ton pronostic ne peut plus être modifié.',
-      ].join('\n'));
+      ).setDescription(
+        [
+          `**${safe(m.title)}**`,
+          '',
+          `${EMOJIS[n]} **${safe(m['choice' + n + 'Label'])}**`,
+          '',
+          `${ICON} **${BASE[n]} ${UNIT}** si ton choix est gagnant.`,
+          '',
+          boost
+            ? `⚡ Avec le boost x2 : **${BASE[n] * 2} ${UNIT}**.`
+            : 'Ton boost de cette journée est déjà utilisé.',
+          '',
+          'Une fois confirmé, ton pronostic ne peut plus être modifié.',
+        ].join('\n')
+      );
 
-      const buttons = [
+      const choices = [
         button(
           `md:confirm:${mid}:${n}:0:${m.revision}`,
           '✅ Confirmer',
@@ -3242,7 +3466,7 @@ async function run() {
       ];
 
       if (boost) {
-        buttons.push(
+        choices.push(
           button(
             `md:confirm:${mid}:${n}:1:${m.revision}`,
             '⚡ Confirmer + Boost x2',
@@ -3251,7 +3475,7 @@ async function run() {
         );
       }
 
-      buttons.push(
+      choices.push(
         button(
           'md:cancel',
           'Annuler'
@@ -3262,7 +3486,7 @@ async function run() {
         content: '',
         embeds: [e],
         components: [
-          row(...buttons),
+          row(...choices),
         ],
       });
     }
@@ -3306,7 +3530,7 @@ async function run() {
     async i => {
       if (stopping) return;
 
-      const slashCommand =
+      const isCommand =
         i.isChatInputCommand() &&
         commands.some(
           c =>
@@ -3314,15 +3538,14 @@ async function run() {
             i.commandName
         );
 
-      const buttonInteraction =
+      const isButton =
         i.isButton() &&
-        /^(md:|bet_|confirm_|cancel_bet$)/.test(
-          i.customId
-        );
+        /^(md:|bet_|confirm_|cancel_bet$)/
+          .test(i.customId);
 
       if (
-        !slashCommand &&
-        !buttonInteraction
+        !isCommand &&
+        !isButton
       ) {
         return;
       }
@@ -3339,7 +3562,10 @@ async function run() {
         if (
           !(e instanceof UserError)
         ) {
-          log('Interaction', e);
+          log(
+            'Interaction',
+            e
+          );
         }
 
         const payload = {
@@ -3409,8 +3635,9 @@ async function run() {
           );
         }
 
-        // Mise à jour automatique des commandes.
-        for (const c of commands) {
+        for (
+          const c of commands
+        ) {
           await guild.commands.create(
             c.toJSON()
           );
@@ -3419,7 +3646,10 @@ async function run() {
         const globals =
           await client.application.commands.fetch();
 
-        for (const c of globals.values()) {
+        for (
+          const c of
+          globals.values()
+        ) {
           if (
             commands.some(
               x =>
@@ -3462,6 +3692,7 @@ async function run() {
     client.destroy();
 
     await store.queue;
+
     process.exit(code);
   }
 
@@ -3510,11 +3741,7 @@ if (
 ) {
   run().catch(e => {
     console.error(
-      `Démarrage : ${
-        e instanceof UserError
-          ? e.message
-          : e.code || e.name
-      }`
+      `Démarrage : ${e instanceof UserError ? e.message : e.code || e.name}`
     );
 
     process.exitCode = 1;
@@ -3538,5 +3765,8 @@ if (
     weekMatches,
     matchCard,
     commands,
+    EDITION,
+    programBlocks,
+    validateProgram,
   };
 }
