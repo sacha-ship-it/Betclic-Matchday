@@ -22,28 +22,15 @@ const BASE = { 1: 2, 2: 4, 3: 8 };
 const EMOJIS = { 1: '🤙', 2: '⚡', 3: '🔥' };
 const NAMES = { 1: 'Chill', 2: 'Joueur', 3: 'Vraiiiment joueur' };
 
-// Valeurs de base pour cette édition.
-// Le titre, le texte, les dates, les affiches et l’image sont modifiables.
+// Aucun programme client, match ou montant prérempli.
 const EDITION = {
-  title: 'BETCLIC MATCHDAY DE LA MUERTE ⚽️ 💀',
-  start: '2026-10-20',
-  end: '2026-10-25',
-
-  description:
-    'Une semaine complètement LOCO de paris et 1 000 € de Freebets* à se partager vous attendent ! 🎉',
-
+  title: 'BETCLIC MATCHDAY',
+  description: 'Retrouve ici les prochains MatchDays.',
   blocks: {
-    mardi:
-      '21h00 | PSG - Barcelone / 21h00 | Liverpool - Villarreal / 21h00 | Stuttgart - Atlético',
-
-    mercredi:
-      '18h45 | Lille - Galatasaray / 21h00 | Bayern - Arsenal / 21h00 | Bruges - Lens',
-
-    jeudi:
-      '18h45 | Juventus - Rennes / 18h45 | Sturm Graz - OM / 21h00 | Hoffenheim - OL',
-
-    weekend:
-      'Sam. 24 à 13h30 | Aston Villa - Manchester City / Sam. 24 à 18h00 | Naples - Roma / Dim. 25 à 15h00 | Monaco - LOSC / Dim. 25 à 20h45 | PSG - OL / Dim. 25 à 21h00 | Barça - Real',
+    mardi: '',
+    mercredi: '',
+    jeudi: '',
+    weekend: '',
   },
 };
 
@@ -72,12 +59,7 @@ const digest = x =>
 
 const clean = (x, max, label) => {
   const s = String(x || '').trim().replace(/[\u2013\u2014]/g, '-');
-
-  need(
-    s.length > 0 && s.length <= max,
-    `${label} : entre 1 et ${max} caractères.`
-  );
-
+  need(s.length > 0 && s.length <= max, `${label} : entre 1 et ${max} caractères.`);
   return s;
 };
 
@@ -96,9 +78,7 @@ function programBlocks(p) {
 function validateProgram(p) {
   dateKey(p.start);
   dateKey(p.end);
-
   need(p.start <= p.end, 'La date de début doit précéder la date de fin.');
-  need(programBlocks(p).length, 'Ajoute au moins un groupe de matchs.');
 
   for (const [key] of programBlocks(p)) {
     const text = fixtures(p.blocks[key])
@@ -645,7 +625,6 @@ function matchCard(m) {
   const open = isOpen(m);
   const e = embed(m.title).setColor(open ? COLOR : 0x7F1D1D);
 
-  // Le Markdown du texte saisi est conservé.
   const intro = m.description
     ? m.description
     : 'Choisis ton pronostic et tente de grimper au classement de la semaine !';
@@ -753,34 +732,14 @@ function weekMatches(s, p) {
 function weekCard(s, p) {
   const groups = programBlocks(p);
 
-  const custom = p.customText ??
-    Boolean(p.description && p.description !== EDITION.description);
-
-  const intro = custom
-    ? p.description
-    : EDITION.description
-        .replace('complètement LOCO', '**complètement LOCO**')
-        .replace('1 000 € de Freebets', '**1 000 € de Freebets**');
-
-  // Avec un texte personnalisé, aucune description automatique n’est ajoutée.
-  const suffix = custom ? '' : [
-    '',
-    '',
-    `🗓️ **Du ${dateLabel(p.start)} au ${dateLabel(p.end)}**`,
-    `🎯 **${groups.length} MatchDay${groups.length > 1 ? 's' : ''} au programme**`,
-    '',
-    `Rendez-vous dans <#${p.matchesChannelId || p.channelId}> pour participer aux matchs du jour.`,
-    '',
-    `${ICON} Cumule un **MAXIMUM de ${UNIT}** tout au long de la semaine pour grimper au classement.`,
-    '',
-    'Chaque MatchDay propose 3 choix : **2, 4 ou 8 points**, avec **un boost x2 par journée**.',
-    '',
-    '\u200b',
-  ].join('\n');
+  // La présence du texte suffit. Aucun ancien indicateur ne peut l’ignorer.
+  const custom = Boolean(String(p.description || '').trim());
+  const intro = custom ? p.description : EDITION.description;
 
   const e = embed(p.title);
 
-  for (const [key, label] of groups) {
+  // Si texte est rempli, aucun bloc automatique n’est affiché.
+  for (const [key, label] of (custom ? [] : groups)) {
     const date = key === 'weekend' ? '' : (() => {
       const target = {
         mardi: 2,
@@ -822,21 +781,14 @@ function weekCard(s, p) {
     });
   }
 
-  if (!custom) {
-    e.addFields({
-      name: '🕒 Horaires',
-      value: 'Heure de Paris. Sous réserve de modification du calendrier.',
-    });
-  }
-
-  if (p.rulesChannelId) {
+  if (!custom && p.rulesChannelId) {
     e.addFields({
       name: '📋 Règlement',
       value: `<#${p.rulesChannelId}>`,
     });
   }
 
-  const disclaimer = !custom || /freebets?/i.test(intro)
+  const disclaimer = /freebets?/i.test(intro)
     ? ' | Freebets = crédits de jeu non retirables'
     : '';
 
@@ -844,7 +796,7 @@ function weekCard(s, p) {
     text: `Betclic MatchDay | Programme ${p.id}${disclaimer}`,
   });
 
-  const content = longText(e, intro, suffix);
+  const content = longText(e, intro, '');
 
   return {
     content,
@@ -1086,7 +1038,7 @@ function programOptions(c, editing = false) {
     )
     .addStringOption(o => o
       .setName('titre')
-      .setDescription('Titre libre, sinon Betclic MatchDay de la Muerte')
+      .setDescription('Titre libre de l’annonce, sinon BETCLIC MATCHDAY')
       .setMaxLength(180)
     )
     .addStringOption(o => o
@@ -1096,11 +1048,11 @@ function programOptions(c, editing = false) {
     )
     .addStringOption(o => o
       .setName('debut')
-      .setDescription('AAAA-MM-JJ, sinon 2026-10-20 pour cette édition')
+      .setDescription('Début AAAA-MM-JJ, sinon lundi de la semaine actuelle')
     )
     .addStringOption(o => o
       .setName('fin')
-      .setDescription('AAAA-MM-JJ, sinon 2026-10-25 pour cette édition')
+      .setDescription('Fin AAAA-MM-JJ, sinon dimanche de la semaine actuelle')
     );
 
   for (const key of Object.keys(GROUPS)) {
@@ -1939,6 +1891,8 @@ async function run() {
         'Programme introuvable.'
       );
 
+      const start = monday(day(Date.now()));
+
       const p = old ? copy(old) : {
         id: 'week_' + uid(),
         status: 'scheduled',
@@ -1950,8 +1904,8 @@ async function run() {
         description: '',
         customText: false,
         title: EDITION.title,
-        start: EDITION.start,
-        end: EDITION.end,
+        start,
+        end: shift(start, 6),
         blocks: copy(EDITION.blocks),
         roleId: null,
         messageId: null,
@@ -2087,7 +2041,7 @@ async function run() {
       void tick();
 
       return i.editReply(
-        `✅ Programme ${editing ? 'modifié' : 'créé'}.\nID : \`${p.id}\`\nDu ${p.start} au ${p.end}\nPublication : ${time(p.publishAt)}\nSalon : <#${p.channelId}>\n${programBlocks(p).length} rendez-vous et ${weekMatches(s, p).length} affiches, indépendants des paris.\nPour modifier les affiches : /edit-week.`
+        `✅ Programme ${editing ? 'modifié' : 'créé'}.\nID : \`${p.id}\`\nDu ${p.start} au ${p.end}\nPublication : ${time(p.publishAt)}\nSalon : <#${p.channelId}>\nPour modifier l’annonce : /edit-week.`
       );
     }
 
