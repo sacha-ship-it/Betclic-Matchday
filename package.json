@@ -1,5 +1,5 @@
 {
-  "name": "betclic-matchday-muerte",
+  "name": "betclic-matchday",
   "version": "3.0.0",
   "private": true,
   "main": "index.js",
@@ -7,8 +7,7 @@
     "node": "24.x"
   },
   "scripts": {
-    "start": "node index.js",
-    "deploy": "node -e \"console.log('Les commandes sont mises à jour automatiquement au démarrage du bot.')\""
+    "start": "node index.js"
   },
   "dependencies": {
     "discord.js": "14.26.4"
