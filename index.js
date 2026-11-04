@@ -32,9 +32,6 @@ const BASE = { 1: 2, 2: 4, 3: 8 };
 const EMOJIS = { 1: '🤙', 2: '⚡', 3: '🔥' };
 const NAMES = { 1: 'Chill', 2: 'Joueur', 3: 'Vraiiiment joueur' };
 
-const DEFAULT_MATCH_TEXT =
-  'Choisis ton pronostic et tente de grimper en haut du classement !';
-
 const EDITION = {
   title: 'BETCLIC MATCHDAY',
   description: 'Retrouve ici les prochains MatchDays.',
@@ -330,6 +327,7 @@ function migrate(state) {
 
       if (bet.boosted) {
         const key = bet.boostDay || match.date;
+
         state.boosts[key] ||= {};
         state.boosts[key][id] ||= match.id;
       }
@@ -432,6 +430,7 @@ class Store {
     });
 
     this.queue = task.catch(() => {});
+
     return task;
   }
 }
@@ -593,7 +592,9 @@ function rangeOptions(options) {
 
   const type = options.getString('type') || 'week';
 
-  if (type === 'general') return { label: 'général' };
+  if (type === 'general') {
+    return { label: 'général' };
+  }
 
   if (type === 'today') {
     const current = sportDay();
@@ -641,14 +642,19 @@ function row(...buttons) {
 function media(item, targetEmbed) {
   if (item.imageFile) {
     const name = path.basename(item.imageFile);
+
     targetEmbed.setImage(`attachment://${name}`);
 
     return {
-      files: [new AttachmentBuilder(item.imageFile, { name })],
+      files: [
+        new AttachmentBuilder(item.imageFile, { name }),
+      ],
     };
   }
 
-  if (item.imageUrl) targetEmbed.setImage(item.imageUrl);
+  if (item.imageUrl) {
+    targetEmbed.setImage(item.imageUrl);
+  }
 
   return {};
 }
@@ -698,7 +704,8 @@ function matchCard(match) {
   const targetEmbed = embed(match.title)
     .setColor(open ? COLOR : 0x7F1D1D);
 
-  const intro = match.description || DEFAULT_MATCH_TEXT;
+  const intro = match.description ||
+    'Choisis ton pronostic et tente de grimper en haut du classement !';
 
   const lines = [
     '',
@@ -733,7 +740,11 @@ function matchCard(match) {
     text: `Betclic MatchDay | Match ${match.id}`,
   });
 
-  const content = longText(targetEmbed, intro, lines.join('\n'));
+  const content = longText(
+    targetEmbed,
+    intro,
+    lines.join('\n'),
+  );
 
   return {
     content,
@@ -808,15 +819,26 @@ function weekMatches(state, program) {
 
 function weekCard(state, program) {
   const groups = programBlocks(program);
-  const custom = Boolean(String(program.description || '').trim());
-  const intro = custom ? program.description : EDITION.description;
+
+  const custom = Boolean(
+    String(program.description || '').trim(),
+  );
+
+  const intro = custom
+    ? program.description
+    : EDITION.description;
+
   const targetEmbed = embed(program.title);
 
   for (const [key, label] of custom ? [] : groups) {
     const date = key === 'weekend'
       ? ''
       : (() => {
-          const target = { mardi: 2, mercredi: 3, jeudi: 4 }[key];
+          const target = {
+            mardi: 2,
+            mercredi: 3,
+            jeudi: 4,
+          }[key];
 
           for (
             let current = program.start;
@@ -826,7 +848,9 @@ function weekCard(state, program) {
             if (
               new Date(current + 'T12:00:00Z').getUTCDay() === target
             ) {
-              return ' ' + current.slice(8) + '/' + current.slice(5, 7);
+              return (
+                ' ' + current.slice(8) + '/' + current.slice(5, 7)
+              );
             }
           }
 
@@ -886,12 +910,25 @@ function weekCard(state, program) {
 
 function staffCard(item, kind) {
   const fields = [
-    { name: 'ID', value: `\`${item.id}\`` },
-    { name: 'Statut', value: item.status, inline: true },
-    { name: 'Salon', value: `<#${item.channelId}>`, inline: true },
+    {
+      name: 'ID',
+      value: `\`${item.id}\``,
+    },
+    {
+      name: 'Statut',
+      value: item.status,
+      inline: true,
+    },
+    {
+      name: 'Salon',
+      value: `<#${item.channelId}>`,
+      inline: true,
+    },
     {
       name: 'Publication',
-      value: item.publishAt ? time(item.publishAt) : 'Immédiate',
+      value: item.publishAt
+        ? time(item.publishAt)
+        : 'Immédiate',
     },
   ];
 
@@ -918,7 +955,8 @@ function staffCard(item, kind) {
       });
     }
 
-    const text = item.description || DEFAULT_MATCH_TEXT;
+    const text = item.description ||
+      'Choisis ton pronostic et tente de grimper en haut du classement !';
 
     fields.push(
       {
@@ -933,7 +971,9 @@ function staffCard(item, kind) {
       },
       {
         name: 'Notification',
-        value: item.roleId ? `<@&${item.roleId}>` : 'Aucune',
+        value: item.roleId
+          ? `<@&${item.roleId}>`
+          : 'Aucune',
         inline: true,
       },
       {
@@ -988,7 +1028,10 @@ function rankCard(state, range, page = 0) {
   const all = rank(state, range);
   const pages = Math.max(1, Math.ceil(all.length / 20));
 
-  page = Math.max(0, Math.min(Number(page) || 0, pages - 1));
+  page = Math.max(
+    0,
+    Math.min(Number(page) || 0, pages - 1),
+  );
 
   const pending = Object.values(state.matches).filter(
     match =>
@@ -1393,7 +1436,9 @@ async function cacheImage(item, dir) {
 
   const url = new URL(item.imageUrl);
 
-  if (!['cdn.discordapp.com', 'media.discordapp.net'].includes(url.hostname)) {
+  if (
+    !['cdn.discordapp.com', 'media.discordapp.net'].includes(url.hostname)
+  ) {
     return;
   }
 
@@ -1427,7 +1472,10 @@ async function cacheImage(item, dir) {
   for await (const chunk of response.body) {
     size += chunk.length;
 
-    need(size <= 8 * 1024 * 1024, 'Image trop lourde : 8 Mo maximum.');
+    need(
+      size <= 8 * 1024 * 1024,
+      'Image trop lourde : 8 Mo maximum.',
+    );
 
     chunks.push(chunk);
   }
@@ -1462,7 +1510,9 @@ async function run() {
 
   parts(Date.now());
 
-  const dir = env.DATA_DIR || env.RAILWAY_VOLUME_MOUNT_PATH || './data';
+  const dir = env.DATA_DIR ||
+    env.RAILWAY_VOLUME_MOUNT_PATH ||
+    './data';
 
   if (env.RAILWAY_ENVIRONMENT_ID) {
     need(
@@ -1505,7 +1555,10 @@ async function run() {
     need(
       target &&
         target.guildId === guildId &&
-        [ChannelType.GuildText, ChannelType.GuildAnnouncement].includes(target.type),
+        [
+          ChannelType.GuildText,
+          ChannelType.GuildAnnouncement,
+        ].includes(target.type),
       'Salon inaccessible ou sur un autre serveur.',
     );
 
@@ -1568,12 +1621,29 @@ async function run() {
   }
 
   async function syncStaff(item, kind) {
-    if (!staffId) return;
+    if (!staffId || item.status === 'deleted') return;
+
+    // Ne pas créer une nouvelle fiche pour un ancien match terminé.
+    if (
+      kind === 'matches' &&
+      !item.staffMessageId &&
+      (
+        item.status === 'closed' ||
+        closeAt(item) <= Date.now()
+      )
+    ) {
+      return;
+    }
 
     const payload = staffCard(item, kind);
-    const hash = digest(payload.embeds.map(value => value.toJSON()));
+    const hash = digest(
+      payload.embeds.map(value => value.toJSON()),
+    );
 
-    if (item.staffHash === hash && item.staffChannelId === staffId) {
+    if (
+      item.staffHash === hash &&
+      item.staffChannelId === staffId
+    ) {
       return;
     }
 
@@ -1583,6 +1653,9 @@ async function run() {
       item.staffChannelId === staffId && item.staffMessageId
         ? await fetchMessage(targetChannel, item.staffMessageId)
         : null;
+
+    // Une fiche staff déjà publiée puis supprimée reste supprimée.
+    if (!previous && item.staffMessageId) return;
 
     if (!previous && item.staffSendingAt) {
       previous = await findMessage(
@@ -1626,7 +1699,10 @@ async function run() {
           item.postChannelId || item.channelId,
         );
 
-        const message = await fetchMessage(targetChannel, item.messageId);
+        const message = await fetchMessage(
+          targetChannel,
+          item.messageId,
+        );
 
         if (message) await message.delete();
 
@@ -1640,7 +1716,11 @@ async function run() {
 
     if (!item.published && item.publishAt > Date.now()) return;
 
-    if (!isWeek && !item.published && closeAt(item) <= Date.now()) {
+    if (
+      !isWeek &&
+      !item.published &&
+      closeAt(item) <= Date.now()
+    ) {
       if (!item.missed) {
         await store.change(database => {
           database.matches[item.id].missed = true;
@@ -1650,7 +1730,9 @@ async function run() {
 
         log(
           `Publication manquée ${item.id}`,
-          new Error('Le match est déjà commencé. Il n’a pas été publié.'),
+          new Error(
+            'Le match est déjà commencé. Il n’a pas été publié.',
+          ),
         );
       }
 
@@ -1661,7 +1743,9 @@ async function run() {
       ? weekCard(state, item)
       : matchCard({
           ...item,
-          status: item.status === 'scheduled' ? 'open' : item.status,
+          status: item.status === 'scheduled'
+            ? 'open'
+            : item.status,
         });
 
     const hash = digest({
@@ -1672,17 +1756,28 @@ async function run() {
       file: item.imageFile,
     });
 
-    if (item.published && item.publicHash === hash && !item.dirty) {
+    if (
+      item.published &&
+      item.publicHash === hash &&
+      !item.dirty
+    ) {
       return;
     }
 
-    if (
+    // Un déplacement demandé avec /edit-match reste possible.
+    const moving = Boolean(
       item.messageId &&
       item.postChannelId &&
-      item.postChannelId !== item.channelId
-    ) {
+      item.postChannelId !== item.channelId,
+    );
+
+    if (moving) {
       const oldChannel = await channel(item.postChannelId);
-      const oldMessage = await fetchMessage(oldChannel, item.messageId);
+
+      const oldMessage = await fetchMessage(
+        oldChannel,
+        item.messageId,
+      );
 
       if (oldMessage) await oldMessage.delete();
 
@@ -1701,6 +1796,21 @@ async function run() {
     let previous = item.messageId
       ? await fetchMessage(targetChannel, item.messageId)
       : null;
+
+    // Ne jamais recréer automatiquement un message déjà publié
+    // et supprimé dans son salon.
+    if (item.published && !previous && !moving) {
+      await store.change(database => {
+        const latest = database[kind][item.id];
+
+        if (latest.version === item.version) {
+          latest.publicHash = hash;
+          latest.dirty = false;
+        }
+      });
+
+      return;
+    }
 
     if (!previous && !item.messageId && item.sendingAt) {
       previous = await findMessage(
@@ -1741,7 +1851,10 @@ async function run() {
             ? { parse: [], roles: [item.roleId] }
             : quiet,
           nonce: BigInt(
-            '0x' + digest(`${kind}:${item.id}:${item.sendingAt}`).slice(0, 16),
+            '0x' +
+              digest(
+                `${kind}:${item.id}:${item.sendingAt}`,
+              ).slice(0, 16),
           ).toString(),
           enforceNonce: true,
         });
@@ -1760,7 +1873,9 @@ async function run() {
         latest.publicHash = hash;
         latest.dirty = false;
 
-        if (latest.status === 'scheduled') latest.status = 'open';
+        if (latest.status === 'scheduled') {
+          latest.status = 'open';
+        }
       }
 
       return false;
@@ -1785,12 +1900,17 @@ async function run() {
 
       if (
         Object.values(current.matches).some(
-          match => match.status === 'open' && closeAt(match) <= Date.now(),
+          match =>
+            match.status === 'open' &&
+            closeAt(match) <= Date.now(),
         )
       ) {
         await store.change(state => {
           for (const match of Object.values(state.matches)) {
-            if (match.status === 'open' && closeAt(match) <= Date.now()) {
+            if (
+              match.status === 'open' &&
+              closeAt(match) <= Date.now()
+            ) {
               match.status = 'closed';
               match.dirty = true;
               match.version++;
@@ -1849,7 +1969,11 @@ async function run() {
       embeds: [],
       components: [
         row(
-          button(`md:yes:${token}`, 'Confirmer', ButtonStyle.Danger),
+          button(
+            `md:yes:${token}`,
+            'Confirmer',
+            ButtonStyle.Danger,
+          ),
           button(`md:no:${token}`, 'Annuler'),
         ),
       ],
@@ -1868,7 +1992,8 @@ async function run() {
 
     await interaction.deferReply({
       flags:
-        name === 'classement' && !interaction.options.getBoolean('prive')
+        name === 'classement' &&
+        !interaction.options.getBoolean('prive')
           ? undefined
           : MessageFlags.Ephemeral,
     });
@@ -1901,7 +2026,11 @@ async function run() {
           };
 
       if (options.getString('titre') !== null) {
-        match.title = clean(options.getString('titre'), 180, 'Titre');
+        match.title = clean(
+          options.getString('titre'),
+          180,
+          'Titre',
+        );
       }
 
       if (options.getString('fermeture')) {
@@ -1932,7 +2061,9 @@ async function run() {
           'Le match est déjà publié : son horaire de publication ne peut plus être changé.',
         );
 
-        match.publishAt = parseTime(options.getString('publication'));
+        match.publishAt = parseTime(
+          options.getString('publication'),
+        );
       }
 
       if (options.getChannel('channel')) {
@@ -1978,14 +2109,20 @@ async function run() {
       if (!old?.published) {
         need(
           closeAt(match) > Date.now() &&
-            (!options.getString('publication') || match.publishAt > Date.now()),
+            (
+              !options.getString('publication') ||
+              match.publishAt > Date.now()
+            ),
           'Choisis des dates futures.',
         );
       }
 
       if (
         old &&
-        (old.status === 'closed' || closeAt(old) <= Date.now())
+        (
+          old.status === 'closed' ||
+          closeAt(old) <= Date.now()
+        )
       ) {
         need(
           closeAt(match) <= closeAt(old),
@@ -1998,14 +2135,17 @@ async function run() {
       const changedChoices = old &&
         [1, 2, 3].some(
           number =>
-            match[`choice${number}Label`] !== old[`choice${number}Label`] ||
-            match[`choice${number}Odds`] !== old[`choice${number}Odds`],
+            match[`choice${number}Label`] !==
+              old[`choice${number}Label`] ||
+            match[`choice${number}Odds`] !==
+              old[`choice${number}Odds`],
         );
 
       const sensitive = changedChoices ||
         (old && match.date !== old.date);
 
       matchCard(match);
+
       await channel(match.channelId);
 
       if (!old || match.imageUrl !== old.imageUrl) {
@@ -2022,14 +2162,16 @@ async function run() {
           );
 
           need(
-            !sensitive || !Object.keys(state.bets[match.id] || {}).length,
+            !sensitive ||
+              !Object.keys(state.bets[match.id] || {}).length,
             'Des pronostics existent : les choix, cotes et la journée ne peuvent plus être remplacés.',
           );
 
           Object.assign(match, {
             published: latest.published,
             status:
-              latest.status === 'scheduled' && match.status === 'closed'
+              latest.status === 'scheduled' &&
+              match.status === 'closed'
                 ? 'closed'
                 : latest.status,
             messageId: latest.messageId,
@@ -2097,7 +2239,11 @@ async function run() {
           };
 
       if (options.getString('titre') !== null) {
-        program.title = clean(options.getString('titre'), 180, 'Titre');
+        program.title = clean(
+          options.getString('titre'),
+          180,
+          'Titre',
+        );
       }
 
       if (options.getString('debut')) {
@@ -2121,12 +2267,15 @@ async function run() {
             .trim()
             .replace(/[\u2013\u2014]/g, '-');
 
-          program.blocks[key] = /^aucun$/i.test(text) ? '' : text;
+          program.blocks[key] = /^aucun$/i.test(text)
+            ? ''
+            : text;
         }
       }
 
       if (options.getChannel('reglement')) {
-        program.rulesChannelId = options.getChannel('reglement').id;
+        program.rulesChannelId =
+          options.getChannel('reglement').id;
       }
 
       validateProgram(program);
@@ -2137,7 +2286,9 @@ async function run() {
           'L’annonce est déjà publiée : modifie son contenu directement avec cette commande.',
         );
 
-        program.publishAt = parseTime(options.getString('publication'));
+        program.publishAt = parseTime(
+          options.getString('publication'),
+        );
 
         need(
           program.publishAt > Date.now(),
@@ -2152,18 +2303,23 @@ async function run() {
       program.channelId ||= interaction.channelId;
 
       if (options.getChannel('salon_matchs')) {
-        program.matchesChannelId = options.getChannel('salon_matchs').id;
+        program.matchesChannelId =
+          options.getChannel('salon_matchs').id;
       }
 
       program.matchesChannelId ||= program.channelId;
 
       if (options.getString('texte') !== null) {
         program.description = options.getString('texte');
-        program.customText = Boolean(program.description.trim());
+        program.customText = Boolean(
+          program.description.trim(),
+        );
       }
 
       if (options.getString('image') !== null) {
-        program.imageUrl = imageURL(options.getString('image'));
+        program.imageUrl = imageURL(
+          options.getString('image'),
+        );
       }
 
       if (options.getRole('notification')) {
@@ -2175,7 +2331,10 @@ async function run() {
         program.imageFile = '';
       }
 
-      if (editing && options.getBoolean('retirer_notification')) {
+      if (
+        editing &&
+        options.getBoolean('retirer_notification')
+      ) {
         program.roleId = null;
       }
 
@@ -2268,23 +2427,29 @@ async function run() {
       const id = interaction.options.getString('match_id');
 
       const winners = [1, 2, 3].filter(
-        number => interaction.options.getBoolean(`choix${number}`),
+        number =>
+          interaction.options.getBoolean(`choix${number}`),
       );
 
       need(
-        interaction.options.getBoolean('annule') || winners.length,
+        interaction.options.getBoolean('annule') ||
+          winners.length,
         'Sélectionne les choix gagnants ou annule:true si aucun choix ne gagne.',
       );
 
       need(
-        !interaction.options.getBoolean('annule') || !winners.length,
+        !interaction.options.getBoolean('annule') ||
+          !winners.length,
         'Un match annulé ne peut pas avoir de choix gagnant.',
       );
 
       await store.change(state => {
         const match = getMatch(state, id);
 
-        need(match.published, 'Ce match n’a pas été publié.');
+        need(
+          match.published,
+          'Ce match n’a pas été publié.',
+        );
 
         need(
           Date.now() >= closeAt(match),
@@ -2301,16 +2466,26 @@ async function run() {
       );
     }
 
-    if (name === 'delete-match' || name === 'delete-week') {
-      const table = name === 'delete-match' ? 'matches' : 'programs';
+    if (
+      name === 'delete-match' ||
+      name === 'delete-week'
+    ) {
+      const table = name === 'delete-match'
+        ? 'matches'
+        : 'programs';
 
       const id = interaction.options.getString(
-        table === 'matches' ? 'match_id' : 'programme_id',
+        table === 'matches'
+          ? 'match_id'
+          : 'programme_id',
       );
 
       const item = state[table][id];
 
-      need(item && item.status !== 'deleted', 'Élément introuvable.');
+      need(
+        item && item.status !== 'deleted',
+        'Élément introuvable.',
+      );
 
       return ask(interaction, {
         kind: 'delete',
@@ -2333,7 +2508,10 @@ async function run() {
 
     if (name === 'classement') {
       return interaction.editReply(
-        rankCard(state, rangeOptions(interaction.options)),
+        rankCard(
+          state,
+          rangeOptions(interaction.options),
+        ),
       );
     }
 
@@ -2347,7 +2525,10 @@ async function run() {
             match.status !== 'deleted' &&
             (
               !start ||
-              (match.date >= start && match.date <= shift(start, 6))
+              (
+                match.date >= start &&
+                match.date <= shift(start, 6)
+              )
             ),
         )
         .sort(
@@ -2367,7 +2548,9 @@ async function run() {
       lines.push(
         '\nPROGRAMMES\n',
         ...Object.values(state.programs)
-          .filter(program => program.status !== 'deleted')
+          .filter(
+            program => program.status !== 'deleted',
+          )
           .map(
             program =>
               `${program.start} au ${program.end} | ${program.title}\n` +
@@ -2381,7 +2564,9 @@ async function run() {
           'Les IDs sont aussi disponibles dans le salon staff si configuré.',
         files: [
           new AttachmentBuilder(
-            Buffer.from(lines.join('\n') || 'Aucun match'),
+            Buffer.from(
+              lines.join('\n') || 'Aucun match',
+            ),
             { name: 'matchdays.txt' },
           ),
         ],
@@ -2389,15 +2574,21 @@ async function run() {
     }
 
     if (name === 'diagnostic') {
-      const matchesToPublish = Object.values(state.matches).filter(
+      const matchesToPublish = Object.values(
+        state.matches,
+      ).filter(
         match =>
           !match.published &&
           match.status !== 'deleted' &&
           !match.missed,
       ).length;
 
-      const programsToPublish = Object.values(state.programs).filter(
-        program => !program.published && program.status !== 'deleted',
+      const programsToPublish = Object.values(
+        state.programs,
+      ).filter(
+        program =>
+          !program.published &&
+          program.status !== 'deleted',
       ).length;
 
       return interaction.editReply(
@@ -2438,7 +2629,11 @@ async function run() {
           continue;
         }
 
-        for (const [id, bet] of Object.entries(state.bets[match.id] || {})) {
+        for (
+          const [id, bet] of Object.entries(
+            state.bets[match.id] || {},
+          )
+        ) {
           if (bet.revision !== match.revision) continue;
 
           rows.push([
@@ -2466,7 +2661,9 @@ async function run() {
         new AttachmentBuilder(
           Buffer.from(
             '\uFEFF' +
-              data.map(line => line.map(csv).join(';')).join('\r\n'),
+            data
+              .map(line => line.map(csv).join(';'))
+              .join('\r\n'),
           ),
           { name },
         );
@@ -2493,7 +2690,10 @@ async function run() {
   }
 
   async function buttons(interaction) {
-    need(interaction.guildId === guildId, 'Serveur invalide.');
+    need(
+      interaction.guildId === guildId,
+      'Serveur invalide.',
+    );
 
     const privateMessage = interaction.message.flags.has(
       MessageFlags.Ephemeral,
@@ -2516,7 +2716,7 @@ async function run() {
       finalRevision,
     ] = interaction.customId.split(':');
 
-    // Compatibilité avec les boutons des versions précédentes.
+    // Compatibilité avec les boutons déjà publiés.
     if (interaction.customId.startsWith('bet_')) {
       const values = interaction.customId.split('_');
       action = 'bet';
@@ -2579,7 +2779,9 @@ async function run() {
             });
 
             for (const table of ['matches', 'programs']) {
-              for (const item of Object.values(state[table])) {
+              for (
+                const item of Object.values(state[table])
+              ) {
                 item.status = 'deleted';
                 item.version++;
               }
@@ -2592,7 +2794,8 @@ async function run() {
             const item = state[pending.table][pending.id];
 
             need(
-              item && item.version === pending.version,
+              item &&
+                item.version === pending.version,
               'Cet élément a changé. Recommence.',
             );
 
@@ -2610,13 +2813,16 @@ async function run() {
             item.version++;
             item.dirty = true;
 
-            for (const user of Object.values(state.users)) {
+            for (
+              const user of Object.values(state.users)
+            ) {
               user.totalPoints = 0;
             }
 
             for (const user of rank(state)) {
               if (state.users[user.id]) {
-                state.users[user.id].totalPoints = user.points;
+                state.users[user.id].totalPoints =
+                  user.points;
               }
             }
           }
@@ -2642,11 +2848,15 @@ async function run() {
       const program = state.programs[matchId];
 
       need(
-        program && program.published && program.status !== 'deleted',
+        program &&
+          program.published &&
+          program.status !== 'deleted',
         'Programme indisponible.',
       );
 
-      return interaction.editReply(weekCard(state, program));
+      return interaction.editReply(
+        weekCard(state, program),
+      );
     }
 
     if (action === 'rank') {
@@ -2671,7 +2881,9 @@ async function run() {
       );
     }
 
-    if (state.bets[matchId]?.[interaction.user.id]) {
+    if (
+      state.bets[matchId]?.[interaction.user.id]
+    ) {
       return interaction.editReply({
         content:
           '✅ Ton pronostic est déjà enregistré. ' +
@@ -2685,32 +2897,38 @@ async function run() {
     need(isOpen(match), 'Les mises sont fermées.');
 
     const number = Number(value);
+
     need(BASE[number], 'Choix invalide.');
 
     if (action === 'bet') {
       need(
-        !revision || Number(revision) === match.revision,
+        !revision ||
+          Number(revision) === match.revision,
         'Le match a changé. Utilise son message actualisé.',
       );
 
-      const boost = boostAvailable(state, interaction.user.id);
+      const boost = boostAvailable(
+        state,
+        interaction.user.id,
+      );
 
-      const targetEmbed = embed('Confirme ton pronostic')
-        .setDescription(
-          [
-            `**${safe(match.title)}**`,
-            '',
-            `${EMOJIS[number]} **${safe(match['choice' + number + 'Label'])}**`,
-            '',
-            `${ICON} **${BASE[number]} ${UNIT}** si ton choix est gagnant.`,
-            '',
-            boost
-              ? `⚡ Avec le boost x2 : **${BASE[number] * 2} ${UNIT}**.`
-              : 'Ton boost de cette journée est déjà utilisé.',
-            '',
-            'Une fois confirmé, ton pronostic ne peut plus être modifié.',
-          ].join('\n'),
-        );
+      const targetEmbed = embed(
+        'Confirme ton pronostic',
+      ).setDescription(
+        [
+          `**${safe(match.title)}**`,
+          '',
+          `${EMOJIS[number]} **${safe(match['choice' + number + 'Label'])}**`,
+          '',
+          `${ICON} **${BASE[number]} ${UNIT}** si ton choix est gagnant.`,
+          '',
+          boost
+            ? `⚡ Avec le boost x2 : **${BASE[number] * 2} ${UNIT}**.`
+            : 'Ton boost de cette journée est déjà utilisé.',
+          '',
+          'Une fois confirmé, ton pronostic ne peut plus être modifié.',
+        ].join('\n'),
+      );
 
       const choices = [
         button(
@@ -2730,7 +2948,9 @@ async function run() {
         );
       }
 
-      choices.push(button('md:cancel', 'Annuler'));
+      choices.push(
+        button('md:cancel', 'Annuler'),
+      );
 
       return interaction.editReply({
         content: '',
@@ -2764,100 +2984,136 @@ async function run() {
     }
   }
 
-  client.on(Events.InteractionCreate, async interaction => {
-    if (stopping) return;
+  client.on(
+    Events.InteractionCreate,
+    async interaction => {
+      if (stopping) return;
 
-    const knownCommand =
-      interaction.isChatInputCommand() &&
-      commands.some(
-        command => command.name === interaction.commandName,
-      );
+      const knownCommand =
+        interaction.isChatInputCommand() &&
+        commands.some(
+          command =>
+            command.name === interaction.commandName,
+        );
 
-    const knownButton =
-      interaction.isButton() &&
-      /^(md:|bet_|confirm_|cancel_bet$)/.test(interaction.customId);
+      const knownButton =
+        interaction.isButton() &&
+        /^(md:|bet_|confirm_|cancel_bet$)/.test(
+          interaction.customId,
+        );
 
-    if (!knownCommand && !knownButton) return;
-
-    try {
-      if (interaction.isChatInputCommand()) {
-        await slash(interaction);
-      } else {
-        await buttons(interaction);
-      }
-    } catch (error) {
-      if (!(error instanceof UserError)) log('Interaction', error);
-
-      const payload = {
-        content: error instanceof UserError
-          ? `⚠️ ${error.message}`
-          : 'Une erreur est survenue. Consulte les logs du bot.',
-        allowedMentions: quiet,
-      };
+      if (!knownCommand && !knownButton) return;
 
       try {
-        if (interaction.deferred || interaction.replied) {
-          if (interaction.isButton() || interaction.ephemeral) {
-            await interaction.editReply({
-              ...payload,
-              embeds: [],
-              components: [],
-            });
+        if (interaction.isChatInputCommand()) {
+          await slash(interaction);
+        } else {
+          await buttons(interaction);
+        }
+      } catch (error) {
+        if (!(error instanceof UserError)) {
+          log('Interaction', error);
+        }
+
+        const payload = {
+          content: error instanceof UserError
+            ? `⚠️ ${error.message}`
+            : 'Une erreur est survenue. Consulte les logs du bot.',
+          allowedMentions: quiet,
+        };
+
+        try {
+          if (
+            interaction.deferred ||
+            interaction.replied
+          ) {
+            if (
+              interaction.isButton() ||
+              interaction.ephemeral
+            ) {
+              await interaction.editReply({
+                ...payload,
+                embeds: [],
+                components: [],
+              });
+            } else {
+              await interaction.followUp({
+                ...payload,
+                flags: MessageFlags.Ephemeral,
+              });
+            }
           } else {
-            await interaction.followUp({
+            await interaction.reply({
               ...payload,
               flags: MessageFlags.Ephemeral,
             });
           }
-        } else {
-          await interaction.reply({
-            ...payload,
-            flags: MessageFlags.Ephemeral,
-          });
-        }
-      } catch (replyError) {
-        log('Réponse erreur', replyError);
-      }
-    }
-  });
-
-  client.on(Events.Error, error => log('Discord', error));
-
-  client.once(Events.ClientReady, async () => {
-    try {
-      const guild = await client.guilds.fetch(guildId);
-
-      if (staffId) await channel(staffId);
-
-      for (const command of commands) {
-        await guild.commands.create(command.toJSON());
-      }
-
-      const globals = await client.application.commands.fetch();
-
-      for (const command of globals.values()) {
-        if (commands.some(item => item.name === command.name)) {
-          await client.application.commands.delete(command.id);
+        } catch (replyError) {
+          log('Réponse erreur', replyError);
         }
       }
+    },
+  );
 
-      console.log(
-        `MatchDay prêt : ${client.user.tag}. ` +
-        `Fuseau : ${TZ}. Stockage : ${store.file}.`,
-      );
+  client.on(
+    Events.Error,
+    error => log('Discord', error),
+  );
 
-      await tick();
-      timer = setInterval(() => void tick(), 15000);
-    } catch (error) {
-      log('Initialisation', error);
-      void stop(1);
-    }
-  });
+  client.once(
+    Events.ClientReady,
+    async () => {
+      try {
+        const guild = await client.guilds.fetch(
+          guildId,
+        );
+
+        if (staffId) await channel(staffId);
+
+        for (const command of commands) {
+          await guild.commands.create(
+            command.toJSON(),
+          );
+        }
+
+        const globals =
+          await client.application.commands.fetch();
+
+        for (const command of globals.values()) {
+          if (
+            commands.some(
+              item => item.name === command.name,
+            )
+          ) {
+            await client.application.commands.delete(
+              command.id,
+            );
+          }
+        }
+
+        console.log(
+          `MatchDay prêt : ${client.user.tag}. ` +
+          `Fuseau : ${TZ}. Stockage : ${store.file}.`,
+        );
+
+        await tick();
+
+        timer = setInterval(
+          () => void tick(),
+          15000,
+        );
+      } catch (error) {
+        log('Initialisation', error);
+        void stop(1);
+      }
+    },
+  );
 
   async function stop(code = 0) {
     if (stopping) return;
 
     stopping = true;
+
     clearInterval(timer);
     client.destroy();
 
@@ -2866,18 +3122,31 @@ async function run() {
     process.exit(code);
   }
 
-  process.once('SIGINT', () => void stop());
-  process.once('SIGTERM', () => void stop());
+  process.once(
+    'SIGINT',
+    () => void stop(),
+  );
 
-  process.once('uncaughtException', error => {
-    log('Erreur fatale', error);
-    void stop(1);
-  });
+  process.once(
+    'SIGTERM',
+    () => void stop(),
+  );
 
-  process.once('unhandledRejection', error => {
-    log('Erreur fatale', error);
-    void stop(1);
-  });
+  process.once(
+    'uncaughtException',
+    error => {
+      log('Erreur fatale', error);
+      void stop(1);
+    },
+  );
+
+  process.once(
+    'unhandledRejection',
+    error => {
+      log('Erreur fatale', error);
+      void stop(1);
+    },
+  );
 
   await client.login(env.DISCORD_TOKEN);
 }
