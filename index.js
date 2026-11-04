@@ -29,18 +29,11 @@ const COLOR = /^#[a-f\d]{6}$/i.test(process.env.MATCHDAY_COLOR || '')
   : '#E10014';
 
 const BASE = { 1: 2, 2: 4, 3: 8 };
+const EMOJIS = { 1: '🤙', 2: '⚡', 3: '🔥' };
+const NAMES = { 1: 'Chill', 2: 'Joueur', 3: 'Vraiiiment joueur' };
 
-const EMOJIS = {
-  1: '🤙',
-  2: '⚡',
-  3: '🔥',
-};
-
-const NAMES = {
-  1: 'Chill',
-  2: 'Joueur',
-  3: 'Vraiiiment joueur',
-};
+const DEFAULT_MATCH_TEXT =
+  'Choisis ton pronostic et tente de grimper en haut du classement !';
 
 const EDITION = {
   title: 'BETCLIC MATCHDAY',
@@ -61,14 +54,11 @@ const GROUPS = {
 };
 
 const quiet = { parse: [] };
-
 const uid = () => randomUUID().replaceAll('-', '').slice(0, 16);
 const copy = value => structuredClone(value);
 
 const digest = value =>
-  createHash('sha256')
-    .update(JSON.stringify(value))
-    .digest('hex');
+  createHash('sha256').update(JSON.stringify(value)).digest('hex');
 
 const safe = value =>
   escapeMarkdown(String(value)).replaceAll('@', '@\u200b');
@@ -340,7 +330,6 @@ function migrate(state) {
 
       if (bet.boosted) {
         const key = bet.boostDay || match.date;
-
         state.boosts[key] ||= {};
         state.boosts[key][id] ||= match.id;
       }
@@ -370,11 +359,8 @@ function migrate(state) {
         ).getUTCDay();
 
         const key =
-          {
-            2: 'mardi',
-            3: 'mercredi',
-            4: 'jeudi',
-          }[weekday] || 'weekend';
+          { 2: 'mardi', 3: 'mercredi', 4: 'jeudi' }[weekday] ||
+          'weekend';
 
         program.blocks[key] +=
           (program.blocks[key] ? ' / ' : '') + match.title;
@@ -607,9 +593,7 @@ function rangeOptions(options) {
 
   const type = options.getString('type') || 'week';
 
-  if (type === 'general') {
-    return { label: 'général' };
-  }
+  if (type === 'general') return { label: 'général' };
 
   if (type === 'today') {
     const current = sportDay();
@@ -657,19 +641,14 @@ function row(...buttons) {
 function media(item, targetEmbed) {
   if (item.imageFile) {
     const name = path.basename(item.imageFile);
-
     targetEmbed.setImage(`attachment://${name}`);
 
     return {
-      files: [
-        new AttachmentBuilder(item.imageFile, { name }),
-      ],
+      files: [new AttachmentBuilder(item.imageFile, { name })],
     };
   }
 
-  if (item.imageUrl) {
-    targetEmbed.setImage(item.imageUrl);
-  }
+  if (item.imageUrl) targetEmbed.setImage(item.imageUrl);
 
   return {};
 }
@@ -719,8 +698,7 @@ function matchCard(match) {
   const targetEmbed = embed(match.title)
     .setColor(open ? COLOR : 0x7F1D1D);
 
-  const intro = match.description ||
-    'Choisis ton pronostic et tente de grimper au classement de la semaine !';
+  const intro = match.description || DEFAULT_MATCH_TEXT;
 
   const lines = [
     '',
@@ -755,11 +733,7 @@ function matchCard(match) {
     text: `Betclic MatchDay | Match ${match.id}`,
   });
 
-  const content = longText(
-    targetEmbed,
-    intro,
-    lines.join('\n'),
-  );
+  const content = longText(targetEmbed, intro, lines.join('\n'));
 
   return {
     content,
@@ -834,25 +808,15 @@ function weekMatches(state, program) {
 
 function weekCard(state, program) {
   const groups = programBlocks(program);
-  const custom = Boolean(
-    String(program.description || '').trim(),
-  );
-
-  const intro = custom
-    ? program.description
-    : EDITION.description;
-
+  const custom = Boolean(String(program.description || '').trim());
+  const intro = custom ? program.description : EDITION.description;
   const targetEmbed = embed(program.title);
 
   for (const [key, label] of custom ? [] : groups) {
     const date = key === 'weekend'
       ? ''
       : (() => {
-          const target = {
-            mardi: 2,
-            mercredi: 3,
-            jeudi: 4,
-          }[key];
+          const target = { mardi: 2, mercredi: 3, jeudi: 4 }[key];
 
           for (
             let current = program.start;
@@ -862,9 +826,7 @@ function weekCard(state, program) {
             if (
               new Date(current + 'T12:00:00Z').getUTCDay() === target
             ) {
-              return (
-                ' ' + current.slice(8) + '/' + current.slice(5, 7)
-              );
+              return ' ' + current.slice(8) + '/' + current.slice(5, 7);
             }
           }
 
@@ -924,25 +886,12 @@ function weekCard(state, program) {
 
 function staffCard(item, kind) {
   const fields = [
-    {
-      name: 'ID',
-      value: `\`${item.id}\``,
-    },
-    {
-      name: 'Statut',
-      value: item.status,
-      inline: true,
-    },
-    {
-      name: 'Salon',
-      value: `<#${item.channelId}>`,
-      inline: true,
-    },
+    { name: 'ID', value: `\`${item.id}\`` },
+    { name: 'Statut', value: item.status, inline: true },
+    { name: 'Salon', value: `<#${item.channelId}>`, inline: true },
     {
       name: 'Publication',
-      value: item.publishAt
-        ? time(item.publishAt)
-        : 'Immédiate',
+      value: item.publishAt ? time(item.publishAt) : 'Immédiate',
     },
   ];
 
@@ -957,6 +906,57 @@ function staffCard(item, kind) {
         name: 'Journée sportive',
         value: item.date,
         inline: true,
+      },
+    );
+
+    for (const number of [1, 2, 3]) {
+      fields.push({
+        name: `${EMOJIS[number]} Choix ${number} · ${BASE[number]} ${UNIT}`,
+        value:
+          `${safe(item[`choice${number}Label`])}\n` +
+          `Cote : **${safe(item[`choice${number}Odds`])}**`,
+      });
+    }
+
+    const text = item.description || DEFAULT_MATCH_TEXT;
+
+    fields.push(
+      {
+        name: 'Texte du match',
+        value:
+          safe(text.slice(0, 850)) +
+          (
+            text.length > 850
+              ? '\n[Suite dans le message du match]'
+              : ''
+          ),
+      },
+      {
+        name: 'Notification',
+        value: item.roleId ? `<@&${item.roleId}>` : 'Aucune',
+        inline: true,
+      },
+      {
+        name: 'Visuel',
+        value: item.imageUrl
+          ? `[Voir le visuel](${item.imageUrl})`
+          : 'Aucun',
+        inline: true,
+      },
+      {
+        name: 'Résultat',
+        value: item.result === null
+          ? 'En attente'
+          : item.result.length
+            ? item.result.map(number => `Choix ${number}`).join(', ')
+            : 'Aucun choix gagnant',
+      },
+      {
+        name: 'Modifier ce match',
+        value:
+          `Utilise **/edit-match** avec match_id : \`${item.id}\`\n` +
+          'Tu peux modifier le texte, le titre, le visuel et les paramètres disponibles. ' +
+          'Les choix, cotes et la journée sont verrouillés après la première participation.',
       },
     );
   } else {
@@ -988,10 +988,7 @@ function rankCard(state, range, page = 0) {
   const all = rank(state, range);
   const pages = Math.max(1, Math.ceil(all.length / 20));
 
-  page = Math.max(
-    0,
-    Math.min(Number(page) || 0, pages - 1),
-  );
+  page = Math.max(0, Math.min(Number(page) || 0, pages - 1));
 
   const pending = Object.values(state.matches).filter(
     match =>
@@ -1396,9 +1393,7 @@ async function cacheImage(item, dir) {
 
   const url = new URL(item.imageUrl);
 
-  if (
-    !['cdn.discordapp.com', 'media.discordapp.net'].includes(url.hostname)
-  ) {
+  if (!['cdn.discordapp.com', 'media.discordapp.net'].includes(url.hostname)) {
     return;
   }
 
@@ -1467,9 +1462,7 @@ async function run() {
 
   parts(Date.now());
 
-  const dir = env.DATA_DIR ||
-    env.RAILWAY_VOLUME_MOUNT_PATH ||
-    './data';
+  const dir = env.DATA_DIR || env.RAILWAY_VOLUME_MOUNT_PATH || './data';
 
   if (env.RAILWAY_ENVIRONMENT_ID) {
     need(
@@ -1512,10 +1505,7 @@ async function run() {
     need(
       target &&
         target.guildId === guildId &&
-        [
-          ChannelType.GuildText,
-          ChannelType.GuildAnnouncement,
-        ].includes(target.type),
+        [ChannelType.GuildText, ChannelType.GuildAnnouncement].includes(target.type),
       'Salon inaccessible ou sur un autre serveur.',
     );
 
@@ -1583,10 +1573,7 @@ async function run() {
     const payload = staffCard(item, kind);
     const hash = digest(payload.embeds.map(value => value.toJSON()));
 
-    if (
-      item.staffHash === hash &&
-      item.staffChannelId === staffId
-    ) {
+    if (item.staffHash === hash && item.staffChannelId === staffId) {
       return;
     }
 
@@ -1639,10 +1626,7 @@ async function run() {
           item.postChannelId || item.channelId,
         );
 
-        const message = await fetchMessage(
-          targetChannel,
-          item.messageId,
-        );
+        const message = await fetchMessage(targetChannel, item.messageId);
 
         if (message) await message.delete();
 
@@ -1656,11 +1640,7 @@ async function run() {
 
     if (!item.published && item.publishAt > Date.now()) return;
 
-    if (
-      !isWeek &&
-      !item.published &&
-      closeAt(item) <= Date.now()
-    ) {
+    if (!isWeek && !item.published && closeAt(item) <= Date.now()) {
       if (!item.missed) {
         await store.change(database => {
           database.matches[item.id].missed = true;
@@ -1692,11 +1672,7 @@ async function run() {
       file: item.imageFile,
     });
 
-    if (
-      item.published &&
-      item.publicHash === hash &&
-      !item.dirty
-    ) {
+    if (item.published && item.publicHash === hash && !item.dirty) {
       return;
     }
 
@@ -1706,10 +1682,7 @@ async function run() {
       item.postChannelId !== item.channelId
     ) {
       const oldChannel = await channel(item.postChannelId);
-      const oldMessage = await fetchMessage(
-        oldChannel,
-        item.messageId,
-      );
+      const oldMessage = await fetchMessage(oldChannel, item.messageId);
 
       if (oldMessage) await oldMessage.delete();
 
@@ -1768,8 +1741,7 @@ async function run() {
             ? { parse: [], roles: [item.roleId] }
             : quiet,
           nonce: BigInt(
-            '0x' +
-              digest(`${kind}:${item.id}:${item.sendingAt}`).slice(0, 16),
+            '0x' + digest(`${kind}:${item.id}:${item.sendingAt}`).slice(0, 16),
           ).toString(),
           enforceNonce: true,
         });
@@ -1788,9 +1760,7 @@ async function run() {
         latest.publicHash = hash;
         latest.dirty = false;
 
-        if (latest.status === 'scheduled') {
-          latest.status = 'open';
-        }
+        if (latest.status === 'scheduled') latest.status = 'open';
       }
 
       return false;
@@ -1815,17 +1785,12 @@ async function run() {
 
       if (
         Object.values(current.matches).some(
-          match =>
-            match.status === 'open' &&
-            closeAt(match) <= Date.now(),
+          match => match.status === 'open' && closeAt(match) <= Date.now(),
         )
       ) {
         await store.change(state => {
           for (const match of Object.values(state.matches)) {
-            if (
-              match.status === 'open' &&
-              closeAt(match) <= Date.now()
-            ) {
+            if (match.status === 'open' && closeAt(match) <= Date.now()) {
               match.status = 'closed';
               match.dirty = true;
               match.version++;
@@ -1884,11 +1849,7 @@ async function run() {
       embeds: [],
       components: [
         row(
-          button(
-            `md:yes:${token}`,
-            'Confirmer',
-            ButtonStyle.Danger,
-          ),
+          button(`md:yes:${token}`, 'Confirmer', ButtonStyle.Danger),
           button(`md:no:${token}`, 'Annuler'),
         ),
       ],
@@ -1907,8 +1868,7 @@ async function run() {
 
     await interaction.deferReply({
       flags:
-        name === 'classement' &&
-        !interaction.options.getBoolean('prive')
+        name === 'classement' && !interaction.options.getBoolean('prive')
           ? undefined
           : MessageFlags.Ephemeral,
     });
@@ -1941,11 +1901,7 @@ async function run() {
           };
 
       if (options.getString('titre') !== null) {
-        match.title = clean(
-          options.getString('titre'),
-          180,
-          'Titre',
-        );
+        match.title = clean(options.getString('titre'), 180, 'Titre');
       }
 
       if (options.getString('fermeture')) {
@@ -1976,9 +1932,7 @@ async function run() {
           'Le match est déjà publié : son horaire de publication ne peut plus être changé.',
         );
 
-        match.publishAt = parseTime(
-          options.getString('publication'),
-        );
+        match.publishAt = parseTime(options.getString('publication'));
       }
 
       if (options.getChannel('channel')) {
@@ -2024,20 +1978,14 @@ async function run() {
       if (!old?.published) {
         need(
           closeAt(match) > Date.now() &&
-            (
-              !options.getString('publication') ||
-              match.publishAt > Date.now()
-            ),
+            (!options.getString('publication') || match.publishAt > Date.now()),
           'Choisis des dates futures.',
         );
       }
 
       if (
         old &&
-        (
-          old.status === 'closed' ||
-          closeAt(old) <= Date.now()
-        )
+        (old.status === 'closed' || closeAt(old) <= Date.now())
       ) {
         need(
           closeAt(match) <= closeAt(old),
@@ -2058,7 +2006,6 @@ async function run() {
         (old && match.date !== old.date);
 
       matchCard(match);
-
       await channel(match.channelId);
 
       if (!old || match.imageUrl !== old.imageUrl) {
@@ -2075,16 +2022,14 @@ async function run() {
           );
 
           need(
-            !sensitive ||
-              !Object.keys(state.bets[match.id] || {}).length,
+            !sensitive || !Object.keys(state.bets[match.id] || {}).length,
             'Des pronostics existent : les choix, cotes et la journée ne peuvent plus être remplacés.',
           );
 
           Object.assign(match, {
             published: latest.published,
             status:
-              latest.status === 'scheduled' &&
-              match.status === 'closed'
+              latest.status === 'scheduled' && match.status === 'closed'
                 ? 'closed'
                 : latest.status,
             messageId: latest.messageId,
@@ -2152,11 +2097,7 @@ async function run() {
           };
 
       if (options.getString('titre') !== null) {
-        program.title = clean(
-          options.getString('titre'),
-          180,
-          'Titre',
-        );
+        program.title = clean(options.getString('titre'), 180, 'Titre');
       }
 
       if (options.getString('debut')) {
@@ -2180,15 +2121,12 @@ async function run() {
             .trim()
             .replace(/[\u2013\u2014]/g, '-');
 
-          program.blocks[key] = /^aucun$/i.test(text)
-            ? ''
-            : text;
+          program.blocks[key] = /^aucun$/i.test(text) ? '' : text;
         }
       }
 
       if (options.getChannel('reglement')) {
-        program.rulesChannelId =
-          options.getChannel('reglement').id;
+        program.rulesChannelId = options.getChannel('reglement').id;
       }
 
       validateProgram(program);
@@ -2199,9 +2137,7 @@ async function run() {
           'L’annonce est déjà publiée : modifie son contenu directement avec cette commande.',
         );
 
-        program.publishAt = parseTime(
-          options.getString('publication'),
-        );
+        program.publishAt = parseTime(options.getString('publication'));
 
         need(
           program.publishAt > Date.now(),
@@ -2216,8 +2152,7 @@ async function run() {
       program.channelId ||= interaction.channelId;
 
       if (options.getChannel('salon_matchs')) {
-        program.matchesChannelId =
-          options.getChannel('salon_matchs').id;
+        program.matchesChannelId = options.getChannel('salon_matchs').id;
       }
 
       program.matchesChannelId ||= program.channelId;
@@ -2367,9 +2302,7 @@ async function run() {
     }
 
     if (name === 'delete-match' || name === 'delete-week') {
-      const table = name === 'delete-match'
-        ? 'matches'
-        : 'programs';
+      const table = name === 'delete-match' ? 'matches' : 'programs';
 
       const id = interaction.options.getString(
         table === 'matches' ? 'match_id' : 'programme_id',
@@ -2377,10 +2310,7 @@ async function run() {
 
       const item = state[table][id];
 
-      need(
-        item && item.status !== 'deleted',
-        'Élément introuvable.',
-      );
+      need(item && item.status !== 'deleted', 'Élément introuvable.');
 
       return ask(interaction, {
         kind: 'delete',
@@ -2417,10 +2347,7 @@ async function run() {
             match.status !== 'deleted' &&
             (
               !start ||
-              (
-                match.date >= start &&
-                match.date <= shift(start, 6)
-              )
+              (match.date >= start && match.date <= shift(start, 6))
             ),
         )
         .sort(
@@ -2462,25 +2389,23 @@ async function run() {
     }
 
     if (name === 'diagnostic') {
+      const matchesToPublish = Object.values(state.matches).filter(
+        match =>
+          !match.published &&
+          match.status !== 'deleted' &&
+          !match.missed,
+      ).length;
+
+      const programsToPublish = Object.values(state.programs).filter(
+        program => !program.published && program.status !== 'deleted',
+      ).length;
+
       return interaction.editReply(
         `✅ Stockage : ${store.file}\n` +
         `🕒 Fuseau : ${TZ}\n` +
         `⚡ Journée du boost : de midi à midi (${TZ})\n` +
-        `📅 ${
-          Object.values(state.matches).filter(
-            match =>
-              !match.published &&
-              match.status !== 'deleted' &&
-              !match.missed,
-          ).length
-        } matchs à publier\n` +
-        `📣 ${
-          Object.values(state.programs).filter(
-            program =>
-              !program.published &&
-              program.status !== 'deleted',
-          ).length
-        } programmes à publier\n` +
+        `📅 ${matchesToPublish} matchs à publier\n` +
+        `📣 ${programsToPublish} programmes à publier\n` +
         `🏆 Aucun classement automatique\n` +
         `${ICON} Unité : ${UNIT}`,
       );
@@ -2513,9 +2438,7 @@ async function run() {
           continue;
         }
 
-        for (
-          const [id, bet] of Object.entries(state.bets[match.id] || {})
-        ) {
+        for (const [id, bet] of Object.entries(state.bets[match.id] || {})) {
           if (bet.revision !== match.revision) continue;
 
           rows.push([
@@ -2543,9 +2466,7 @@ async function run() {
         new AttachmentBuilder(
           Buffer.from(
             '\uFEFF' +
-            data
-              .map(line => line.map(csv).join(';'))
-              .join('\r\n'),
+              data.map(line => line.map(csv).join(';')).join('\r\n'),
           ),
           { name },
         );
@@ -2572,10 +2493,7 @@ async function run() {
   }
 
   async function buttons(interaction) {
-    need(
-      interaction.guildId === guildId,
-      'Serveur invalide.',
-    );
+    need(interaction.guildId === guildId, 'Serveur invalide.');
 
     const privateMessage = interaction.message.flags.has(
       MessageFlags.Ephemeral,
@@ -2598,7 +2516,7 @@ async function run() {
       finalRevision,
     ] = interaction.customId.split(':');
 
-    // Compatibilité avec les anciens boutons.
+    // Compatibilité avec les boutons des versions précédentes.
     if (interaction.customId.startsWith('bet_')) {
       const values = interaction.customId.split('_');
       action = 'bet';
@@ -2724,15 +2642,11 @@ async function run() {
       const program = state.programs[matchId];
 
       need(
-        program &&
-          program.published &&
-          program.status !== 'deleted',
+        program && program.published && program.status !== 'deleted',
         'Programme indisponible.',
       );
 
-      return interaction.editReply(
-        weekCard(state, program),
-      );
+      return interaction.editReply(weekCard(state, program));
     }
 
     if (action === 'rank') {
@@ -2771,7 +2685,6 @@ async function run() {
     need(isOpen(match), 'Les mises sont fermées.');
 
     const number = Number(value);
-
     need(BASE[number], 'Choix invalide.');
 
     if (action === 'bet') {
@@ -2780,10 +2693,7 @@ async function run() {
         'Le match a changé. Utilise son message actualisé.',
       );
 
-      const boost = boostAvailable(
-        state,
-        interaction.user.id,
-      );
+      const boost = boostAvailable(state, interaction.user.id);
 
       const targetEmbed = embed('Confirme ton pronostic')
         .setDescription(
@@ -2876,9 +2786,7 @@ async function run() {
         await buttons(interaction);
       }
     } catch (error) {
-      if (!(error instanceof UserError)) {
-        log('Interaction', error);
-      }
+      if (!(error instanceof UserError)) log('Interaction', error);
 
       const payload = {
         content: error instanceof UserError
@@ -2939,7 +2847,6 @@ async function run() {
       );
 
       await tick();
-
       timer = setInterval(() => void tick(), 15000);
     } catch (error) {
       log('Initialisation', error);
@@ -2951,7 +2858,6 @@ async function run() {
     if (stopping) return;
 
     stopping = true;
-
     clearInterval(timer);
     client.destroy();
 
