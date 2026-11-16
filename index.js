@@ -32,6 +32,31 @@ const BASE = { 1: 2, 2: 4, 3: 8 };
 const EMOJIS = { 1: '🤙', 2: '⚡', 3: '🔥' };
 const NAMES = { 1: 'Chill', 2: 'Joueur', 3: 'Vraiiiment joueur' };
 
+const GTA_COLOR = /^#[a-f\d]{6}$/i.test(process.env.MATCHDAY_GTA_COLOR || '')
+  ? process.env.MATCHDAY_GTA_COLOR
+  : '#C653D9';
+const GTA_STARS = { 1: '★☆☆', 2: '★★☆', 3: '★★★' };
+const CLASSIC_STYLE = { unit: UNIT, icon: ICON, levels: EMOJIS };
+const GTA_STYLE = { unit: 'étoiles', icon: '⭐', levels: GTA_STARS };
+
+function cardStyle(item) {
+  return item.theme === 'gta' ? GTA_STYLE : CLASSIC_STYLE;
+}
+
+function editionOption(option) {
+  return option
+    .setName('edition')
+    .setDescription('Édition du Betclic MatchDay')
+    .addChoices(
+      { name: 'Classique', value: 'classic' },
+      { name: 'GTA', value: 'gta' },
+    );
+}
+
+function matchesEdition(match, range) {
+  return !range.theme || (match.theme === 'gta' ? 'gta' : 'classic') === range.theme;
+}
+
 const EDITION = {
   title: 'BETCLIC MATCHDAY',
   description: 'Retrouve ici les prochains MatchDays.',
@@ -451,6 +476,7 @@ function rank(state, range = {}) {
   for (const match of Object.values(state.matches)) {
     if (
       match.status === 'deleted' ||
+      !matchesEdition(match, range) ||
       (range.start && match.date < range.start) ||
       (range.end && match.date > range.end)
     ) {
@@ -573,6 +599,7 @@ function result(state, matchId, winners) {
 }
 
 function rangeOptions(options) {
+  const theme = options.getString('edition') || 'classic';
   const start = options.getString('debut');
   const end = options.getString('fin');
 
@@ -584,6 +611,7 @@ function rangeOptions(options) {
     need(start <= end, 'Période invalide.');
 
     return {
+      theme,
       start,
       end,
       label: `du ${start} au ${end}`,
@@ -593,13 +621,14 @@ function rangeOptions(options) {
   const type = options.getString('type') || 'week';
 
   if (type === 'general') {
-    return { label: 'général' };
+    return { theme, label: 'général' };
   }
 
   if (type === 'today') {
     const current = sportDay();
 
     return {
+      theme,
       start: current,
       end: current,
       label: `du ${current}`,
@@ -609,15 +638,16 @@ function rangeOptions(options) {
   const current = monday(day(Date.now()));
 
   return {
+    theme,
     start: current,
     end: shift(current, 6),
     label: `du ${current} au ${shift(current, 6)}`,
   };
 }
 
-function embed(title) {
+function embed(title, item = {}) {
   return new EmbedBuilder()
-    .setColor(COLOR)
+    .setColor(item.theme === 'gta' ? GTA_COLOR : COLOR)
     .setTitle(title)
     .setFooter({ text: 'Betclic MatchDay' });
 }
@@ -699,13 +729,16 @@ function longText(targetEmbed, intro, suffix) {
 }
 
 function matchCard(match) {
+  const gta = match.theme === 'gta';
+  const { unit, icon, levels } = cardStyle(match);
   const open = isOpen(match);
 
-  const targetEmbed = embed(match.title)
-    .setColor(open ? COLOR : 0x7F1D1D);
+  const targetEmbed = embed(match.title, match)
+    .setColor(gta ? GTA_COLOR : open ? COLOR : 0x7F1D1D);
 
   const intro = match.description ||
-    'Choisis ton pronostic et tente de grimper en haut du classement !';
+    (gta ? 'Choisis ta mission et tente de gagner des étoiles.'
+      : 'Choisis ton pronostic et tente de grimper en haut du classement !');
 
   const lines = [
     '',
@@ -716,14 +749,15 @@ function matchCard(match) {
 
   for (const number of [1, 2, 3]) {
     lines.push(
-      `${EMOJIS[number]} **${safe(match['choice' + number + 'Label'])}**`,
-      `*Cote : ${safe(match['choice' + number + 'Odds'])}* · ${ICON} **${BASE[number]} ${UNIT}**`,
+      `${levels[number]} **${safe(match['choice' + number + 'Label'])}**`,
+      `*Cote : ${safe(match['choice' + number + 'Odds'])}* · ${icon} **${BASE[number]} ${unit}**`,
       '',
     );
   }
 
   lines.push(
-    '⚡ Un boost par journée pour doubler tes gains de points.',
+    gta ? '⚡ Boost quotidien x2 sur la mission de ton choix.'
+      : '⚡ Un boost par journée pour doubler tes gains de points.',
     'Une fois confirmé, ton pronostic est définitif.',
   );
 
@@ -755,7 +789,7 @@ function matchCard(match) {
         ...[1, 2, 3].map(number =>
           button(
             `md:bet:${match.id}:${number}:${match.revision}`,
-            `${EMOJIS[number]} ${NAMES[number]} (+${BASE[number]} ${UNIT})`,
+            `${levels[number]} ${gta ? 'Mission' : NAMES[number]} (+${BASE[number]} ${unit})`,
             [
               0,
               ButtonStyle.Secondary,
@@ -765,7 +799,7 @@ function matchCard(match) {
             !open,
           ),
         ),
-        button(`md:my:${match.id}`, '📋 Mon choix'),
+        button(`md:my:${match.id}`, gta ? '📋 Ma mission' : '📋 Mon choix'),
       ),
     ],
     allowedMentions: quiet,
@@ -773,6 +807,8 @@ function matchCard(match) {
 }
 
 function myCard(state, match, userId) {
+  const gta = match.theme === 'gta';
+  const { unit, icon, levels } = cardStyle(match);
   const bet = state.bets[match.id]?.[userId];
 
   if (!bet) {
@@ -783,19 +819,25 @@ function myCard(state, match, userId) {
     };
   }
 
-  const targetEmbed = embed('✅ Ton pronostic est enregistré')
-    .setColor(0x22C55E)
+  const targetEmbed = embed('✅ Ton pronostic est enregistré', match)
+    .setColor(gta ? GTA_COLOR : 0x22C55E)
     .setDescription(
       [
         `**${safe(match.title)}**`,
         '',
-        `${EMOJIS[bet.choice]} **${safe(match['choice' + bet.choice + 'Label'])}**`,
+        `${levels[bet.choice]} **${safe(match['choice' + bet.choice + 'Label'])}**`,
         '',
-        `${ICON} **${BASE[bet.choice] * (bet.boosted ? 2 : 1)} ${UNIT}** si ton choix est gagnant.${bet.boosted ? ' Boost x2 activé.' : ''}`,
+        `${icon} **${BASE[bet.choice] * (bet.boosted ? 2 : 1)} ${unit}** si ton choix est gagnant.${bet.boosted ? ' Boost x2 activé.' : ''}`,
         '',
         'Ton choix est définitif.',
         match.result
-          ? `\nRésultat : **${earned(match, bet)} ${UNIT} gagnés**.`
+          ? gta
+            ? bet.revision !== match.revision || !match.result.length
+              ? '\n**Mission annulée.**'
+              : earned(match, bet)
+                ? `\n**Mission réussie · +${earned(match, bet)} ⭐**`
+                : '\n**Mission échouée · 0 ⭐**'
+            : `\nRésultat : **${earned(match, bet)} ${unit} gagnés**.`
           : '',
       ].join('\n'),
     );
@@ -826,9 +868,11 @@ function weekCard(state, program) {
 
   const intro = custom
     ? program.description
-    : EDITION.description;
+    : program.theme === 'gta'
+      ? 'Retrouve les missions du week-end et cumule des étoiles au classement.'
+      : EDITION.description;
 
-  const targetEmbed = embed(program.title);
+  const targetEmbed = embed(program.title, program);
 
   for (const [key, label] of custom ? [] : groups) {
     const date = key === 'weekend'
@@ -909,6 +953,7 @@ function weekCard(state, program) {
 }
 
 function staffCard(item, kind) {
+  const { unit, levels } = cardStyle(item);
   const fields = [
     {
       name: 'ID',
@@ -932,6 +977,8 @@ function staffCard(item, kind) {
     },
   ];
 
+  if (item.theme === 'gta') fields.push({ name: 'Édition', value: 'GTA' });
+
   if (kind === 'matches') {
     fields.push(
       {
@@ -948,7 +995,7 @@ function staffCard(item, kind) {
 
     for (const number of [1, 2, 3]) {
       fields.push({
-        name: `${EMOJIS[number]} Choix ${number} · ${BASE[number]} ${UNIT}`,
+        name: `${levels[number]} Choix ${number} · ${BASE[number]} ${unit}`,
         value:
           `${safe(item[`choice${number}Label`])}\n` +
           `Cote : **${safe(item[`choice${number}Odds`])}**`,
@@ -1014,7 +1061,7 @@ function staffCard(item, kind) {
 
   return {
     embeds: [
-      embed(item.title)
+      embed(item.title, item)
         .addFields(fields)
         .setFooter({
           text: `Betclic MatchDay | Staff ${kind} ${item.id}`,
@@ -1025,6 +1072,8 @@ function staffCard(item, kind) {
 }
 
 function rankCard(state, range, page = 0) {
+  const { unit, icon } = cardStyle(range);
+  const rankAction = range.theme === 'gta' ? 'rank-gta' : 'rank';
   const all = rank(state, range);
   const pages = Math.max(1, Math.ceil(all.length / 20));
 
@@ -1036,6 +1085,7 @@ function rankCard(state, range, page = 0) {
   const pending = Object.values(state.matches).filter(
     match =>
       match.status !== 'deleted' &&
+      matchesEdition(match, range) &&
       (!range.start || match.date >= range.start) &&
       (!range.end || match.date <= range.end) &&
       match.result === null,
@@ -1049,12 +1099,12 @@ function rankCard(state, range, page = 0) {
       const medal = ['🥇', '🥈', '🥉'][position] ||
         `**${position + 1}.**`;
 
-      return `${medal} <@${user.id}> | ${ICON} **${user.points} ${UNIT}**`;
+      return `${medal} <@${user.id}> | ${icon} **${user.points} ${unit}**`;
     })
     .join('\n');
 
-  const targetEmbed = embed(`🏆 Classement ${range.label}`)
-    .setDescription(description || 'Aucun point pour le moment.')
+  const targetEmbed = embed(`🏆 Classement ${range.label}`, range)
+    .setDescription(description || (range.theme === 'gta' ? 'Aucune étoile pour le moment.' : 'Aucun point pour le moment.'))
     .setFooter({
       text: `Betclic MatchDay | Page ${page + 1}/${pages}`,
     });
@@ -1078,13 +1128,13 @@ function rankCard(state, range, page = 0) {
       ? [
           row(
             button(
-              `md:rank:${range.start || 'all'}:${range.end || 'all'}:${page - 1}`,
+              `md:${rankAction}:${range.start || 'all'}:${range.end || 'all'}:${page - 1}`,
               '←',
               ButtonStyle.Secondary,
               page === 0,
             ),
             button(
-              `md:rank:${range.start || 'all'}:${range.end || 'all'}:${page + 1}`,
+              `md:${rankAction}:${range.start || 'all'}:${range.end || 'all'}:${page + 1}`,
               '→',
               ButtonStyle.Secondary,
               page === pages - 1,
@@ -1196,7 +1246,7 @@ function matchOptions(command, editing = false) {
       );
   }
 
-  return command;
+  return command.addStringOption(editionOption);
 }
 
 function programOptions(command, editing = false) {
@@ -1306,11 +1356,12 @@ function programOptions(command, editing = false) {
       );
   }
 
-  return command;
+  return command.addStringOption(editionOption);
 }
 
 function ranges(command) {
   return command
+    .addStringOption(editionOption)
     .addStringOption(option =>
       option
         .setName('type')
@@ -2025,6 +2076,9 @@ async function run() {
             messageId: null,
           };
 
+      const edition = options.getString('edition');
+      if (edition) match.theme = edition;
+
       if (options.getString('titre') !== null) {
         match.title = clean(
           options.getString('titre'),
@@ -2237,6 +2291,9 @@ async function run() {
             roleId: null,
             messageId: null,
           };
+
+      const edition = options.getString('edition');
+      if (edition) program.theme = edition;
 
       if (options.getString('titre') !== null) {
         program.title = clean(
@@ -2623,6 +2680,7 @@ async function run() {
       for (const match of Object.values(state.matches)) {
         if (
           match.status === 'deleted' ||
+          !matchesEdition(match, range) ||
           (range.start && match.date < range.start) ||
           (range.end && match.date > range.end)
         ) {
@@ -2859,7 +2917,7 @@ async function run() {
       );
     }
 
-    if (action === 'rank') {
+    if (action === 'rank' || action === 'rank-gta') {
       const range = matchId === 'all'
         ? { label: 'général' }
         : {
@@ -2869,7 +2927,7 @@ async function run() {
           };
 
       return interaction.editReply(
-        rankCard(state, range, revision),
+        rankCard(state, { ...range, theme: action === 'rank-gta' ? 'gta' : 'classic' }, revision),
       );
     }
 
@@ -2912,18 +2970,20 @@ async function run() {
         interaction.user.id,
       );
 
+      const { unit, icon, levels } = cardStyle(match);
       const targetEmbed = embed(
-        'Confirme ton pronostic',
+        match.theme === 'gta' ? 'Confirme ta mission' : 'Confirme ton pronostic',
+        match,
       ).setDescription(
         [
           `**${safe(match.title)}**`,
           '',
-          `${EMOJIS[number]} **${safe(match['choice' + number + 'Label'])}**`,
+          `${levels[number]} **${safe(match['choice' + number + 'Label'])}**`,
           '',
-          `${ICON} **${BASE[number]} ${UNIT}** si ton choix est gagnant.`,
+          `${icon} **${BASE[number]} ${unit}** si ton choix est gagnant.`,
           '',
           boost
-            ? `⚡ Avec le boost x2 : **${BASE[number] * 2} ${UNIT}**.`
+            ? `⚡ Avec le boost x2 : **${BASE[number] * 2} ${unit}**.`
             : 'Ton boost de cette journée est déjà utilisé.',
           '',
           'Une fois confirmé, ton pronostic ne peut plus être modifié.',
