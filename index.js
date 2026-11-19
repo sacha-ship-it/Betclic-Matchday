@@ -35,12 +35,25 @@ const NAMES = { 1: 'Chill', 2: 'Joueur', 3: 'Vraiiiment joueur' };
 const GTA_COLOR = /^#[a-f\d]{6}$/i.test(process.env.MATCHDAY_GTA_COLOR || '')
   ? process.env.MATCHDAY_GTA_COLOR
   : '#C653D9';
+const GTA_BASE = { 1: 2, 2: 4, 3: 6 };
 const GTA_STARS = { 1: '★☆☆', 2: '★★☆', 3: '★★★' };
 const CLASSIC_STYLE = { unit: UNIT, icon: ICON, levels: EMOJIS };
 const GTA_STYLE = { unit: 'étoiles', icon: '⭐', levels: GTA_STARS };
 
+function choicePoints(match, choice) {
+  return (match.pointsByChoice || BASE)[choice];
+}
+
 function cardStyle(item) {
-  return item.theme === 'gta' ? GTA_STYLE : CLASSIC_STYLE;
+  if (item.theme !== 'gta') return CLASSIC_STYLE;
+  if (!item.pointsByChoice) return GTA_STYLE;
+  return {
+    ...GTA_STYLE,
+    levels: Object.fromEntries([1, 2, 3].map(choice => {
+      const count = Math.min(6, Math.max(0, choicePoints(item, choice)));
+      return [choice, '★'.repeat(count) + '☆'.repeat(6 - count)];
+    })),
+  };
 }
 
 function editionOption(option) {
@@ -466,7 +479,7 @@ function earned(match, bet) {
     bet.revision === match.revision &&
     match.result?.includes(bet.choice)
   )
-    ? BASE[bet.choice] * (bet.boosted ? 2 : 1)
+    ? choicePoints(match, bet.choice) * (bet.boosted ? 2 : 1)
     : 0;
 }
 
@@ -750,7 +763,7 @@ function matchCard(match) {
   for (const number of [1, 2, 3]) {
     lines.push(
       `${levels[number]} **${safe(match['choice' + number + 'Label'])}**`,
-      `*Cote : ${safe(match['choice' + number + 'Odds'])}* · ${icon} **${BASE[number]} ${unit}**`,
+      `*Cote : ${safe(match['choice' + number + 'Odds'])}* · ${icon} **${choicePoints(match, number)} ${unit}**`,
       '',
     );
   }
@@ -789,7 +802,7 @@ function matchCard(match) {
         ...[1, 2, 3].map(number =>
           button(
             `md:bet:${match.id}:${number}:${match.revision}`,
-            `${levels[number]} ${gta ? 'Mission' : NAMES[number]} (+${BASE[number]} ${unit})`,
+            `${levels[number]} ${gta ? 'Mission' : NAMES[number]} (+${choicePoints(match, number)} ${unit})`,
             [
               0,
               ButtonStyle.Secondary,
@@ -827,7 +840,7 @@ function myCard(state, match, userId) {
         '',
         `${levels[bet.choice]} **${safe(match['choice' + bet.choice + 'Label'])}**`,
         '',
-        `${icon} **${BASE[bet.choice] * (bet.boosted ? 2 : 1)} ${unit}** si ton choix est gagnant.${bet.boosted ? ' Boost x2 activé.' : ''}`,
+        `${icon} **${choicePoints(match, bet.choice) * (bet.boosted ? 2 : 1)} ${unit}** si ton choix est gagnant.${bet.boosted ? ' Boost x2 activé.' : ''}`,
         '',
         'Ton choix est définitif.',
         match.result
@@ -995,7 +1008,7 @@ function staffCard(item, kind) {
 
     for (const number of [1, 2, 3]) {
       fields.push({
-        name: `${levels[number]} Choix ${number} · ${BASE[number]} ${unit}`,
+        name: `${levels[number]} Choix ${number} · ${choicePoints(item, number)} ${unit}`,
         value:
           `${safe(item[`choice${number}Label`])}\n` +
           `Cote : **${safe(item[`choice${number}Odds`])}**`,
@@ -1176,7 +1189,7 @@ function matchOptions(command, editing = false) {
       .addStringOption(option =>
         option
           .setName(`choix${number}_label`)
-          .setDescription(`Choix ${number} : ${BASE[number]} points`)
+          .setDescription(`Choix ${number} : classique ${BASE[number]} points / GTA ${GTA_BASE[number]} étoiles`)
           .setMaxLength(180)
           .setRequired(!editing),
       )
@@ -2079,6 +2092,9 @@ async function run() {
       const edition = options.getString('edition');
       if (edition) match.theme = edition;
 
+      // Snapshot the scoring for new matches only; preserve all existing rounds.
+      if (!old) match.pointsByChoice = { ...(match.theme === 'gta' ? GTA_BASE : BASE) };
+
       if (options.getString('titre') !== null) {
         match.title = clean(
           options.getString('titre'),
@@ -2980,10 +2996,10 @@ async function run() {
           '',
           `${levels[number]} **${safe(match['choice' + number + 'Label'])}**`,
           '',
-          `${icon} **${BASE[number]} ${unit}** si ton choix est gagnant.`,
+          `${icon} **${choicePoints(match, number)} ${unit}** si ton choix est gagnant.`,
           '',
           boost
-            ? `⚡ Avec le boost x2 : **${BASE[number] * 2} ${unit}**.`
+            ? `⚡ Avec le boost x2 : **${choicePoints(match, number) * 2} ${unit}**.`
             : 'Ton boost de cette journée est déjà utilisé.',
           '',
           'Une fois confirmé, ton pronostic ne peut plus être modifié.',
@@ -3238,6 +3254,8 @@ if (
     shift,
     rank,
     earned,
+    choicePoints,
+    cardStyle,
     place,
     result,
     isOpen,
